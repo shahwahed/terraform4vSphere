@@ -1,0 +1,47 @@
+{
+    "__version": "2.13.0",
+    "__comments": "Sample template to deploy a vCenter Server Appliance with an embedded Platform Services Controller on an ESXi host.",
+    "new_vcsa": {
+        "vc": {
+            "hostname": "${vc_hostname}",
+            "username": "${vc_username}",
+            "password": "${vc_password}",
+            "deployment_network": "${vcsa_network}",
+            "datacenter": "${vc_datacenter}",
+            "datastore": "${vcsa_datastore}",
+            "target": "${vc_cluster}"
+        },
+        "appliance": {
+            "thin_disk_mode": ${disk_mode},
+            "deployment_option": "${deployment_size}",
+            "name": "${vcenter_appliance_name}"
+        },
+        "network": {
+            "ip_family": "${ip_family}",
+            "mode": "${network_mode}",
+            "system_name": "${vcenter_system_name}",
+            "ip": "${vcenter_ip}",
+            "prefix": "${vcenter_prefix}",
+            "gateway": "${vcenter_gateway}",
+            "dns_servers": ${vcenter_dns}
+        },
+        "os": {
+            "password": "${vcenter_root_password}",
+            %{~ if vcenter_ntp_server == null || vcenter_ntp_server == "" ~}
+            "time_tools_sync": true,
+            %{~ else ~}
+            "ntp_servers": "${vcenter_ntp_server}",
+            %{~ endif ~}
+            "ssh_enable": ${vcenter_ssh_enabled}
+        },
+        "sso": {
+            "password": "${vcenter_sso_password}",
+            "domain_name": "${vcenter_sso_domain}"
+        }
+    },
+    "ceip": {
+        "settings": {
+            "ceip_enabled": ${vcenter_ceip_status}
+        }
+    }
+}

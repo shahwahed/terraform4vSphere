@@ -1,0 +1,67 @@
+#!/bin/bash
+
+#UDP_OUT_PORT="53"
+#TCP_OUT_PORT="53,80,443"
+#user variable
+NAT_CLIENTS=`ip -o r show dev ${int_interface} |cut -d" " -f1`
+
+OUT_INT="${out_interface}"
+INT_INT="${int_interface}"
+
+# CLIENTS_SUBNET="192.168.15.0"
+# CLIENTS_SUBNET_MASK="24"
+# DNSMASQ_RANGE="192.168.15.10,192.168.15.100,255.255.255.0"
+# DNSMASQ_DNS="1.1.1.1"
+# OUT_INT="ens192"
+# INT_INT="ens224"
+
+# dyn variable
+CLIENTS_SUBNET="$${NAT_CLIENTS%%/*}"
+CLIENTS_SUBNET_MASK="$${NAT_CLIENTS#*/}"
+INT_ADDR=`ip -o -4 -br addr| grep $${INT_INT}| tr -s ' ' | cut -d" " -f3`
+
+
+# DEBIAN_FRONTEND=noninteractive
+# apt-get -qq -o=Dpkg::Use-Pty=0 install -y dnsmasq
+
+#disable ipv6
+cat > "/etc/sysctl.conf" << EOF
+net.ipv4.ip_forward=1
+net.ipv6.conf.all.disable_ipv6=1
+net.ipv6.conf.default.disable_ipv6=1
+net.ipv6.conf.lo.disable_ipv6=1
+EOF
+sysctl -p /etc/sysctl.conf
+sed -i "s/GRUB_CMDLINE_LINUX_DEFAULT.*/GRUB_CMDLINE_LINUX_DEFAULT=\"ipv6.disable=1\"/g" /etc/default/grub
+update-grub2
+
+# #setup dnsmasq
+# cat > "/etc/dnsmasq.conf" << EOF
+# interface=$${INT_INT}
+# port=0
+# listen-address=$${INT_ADDR%%/*}
+# dhcp-range=$${DNSMASQ_RANGE},3h
+# dhcp-option=option:router,$${INT_ADDR%%/*}
+# dhcp-option=option:dns-server,$${DNSMASQ_DNS}
+# EOF
+
+
+# setup NAT using ufw
+sed -i "s/DEFAULT_FORWARD_POLICY.*/DEFAULT_FORWARD_POLICY=\"ACCEPT\"/g" /etc/default/ufw
+sed -i '/^#.*ip_forward/s/^#//' /etc/ufw/sysctl.conf
+
+sed -i '11s/^/\# NAT table rules\n/' /etc/ufw/before.rules
+sed -i '12s/^/\*nat\n/' /etc/ufw/before.rules
+sed -i '13s/^/:POSTROUTING ACCEPT [0:0]\n/' /etc/ufw/before.rules
+sed -i '14s/^/\n/' /etc/ufw/before.rules
+sed -i "15s/^/\# Forward traffic through $${OUT_INT} - Change to match you out-interface\n/" /etc/ufw/before.rules
+sed -i '16s/^/-F \n/' /etc/ufw/before.rules
+sed -i "17s/^/-A POSTROUTING -s $${CLIENTS_SUBNET}\/$${CLIENTS_SUBNET_MASK} -o $${OUT_INT} -j MASQUERADE\n/" /etc/ufw/before.rules
+sed -i '18s/^/\n/' /etc/ufw/before.rules
+sed -i '19s/^/COMMIT\n/' /etc/ufw/before.rules
+
+service ufw restart
+#service dnsmasq start
+# enable at boot
+#systemctl enable dnsmasq.service
+systemctl enable ufw.service

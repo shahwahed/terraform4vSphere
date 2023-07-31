@@ -1,0 +1,15 @@
+#cloud-config
+apt:
+  conf: |
+    APT {
+      Periodic {
+        Update-Package-Lists "0";
+      };
+    };
+    Unattended-Upgrade {
+      Package-Blacklist {
+        "*";
+      };
+    };
+runcmd:
+  - [ systemctl, stop, apt-daily.timer, apt-daily-upgrade.timer ]

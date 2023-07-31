@@ -1,0 +1,156 @@
+#!/bin/bash
+
+IPXESECSRV="${ipxesecserver}"
+
+
+
+#local variable
+# get ip addresse from the one who can go out
+IPADDR=$(ip route get 8.8.8.8 | awk -F"src " 'NR==1{split($2,a," ");print a[1]}')
+
+
+
+# -qq -o=Dpkg::Use-Pty=0 # option to make apt less verbose -qq for apt and -o=dpkg for apt forking to dpkg to install package
+DEBIAN_FRONTEND=noninteractive
+echo "update source list"
+apt-get -qq -o=Dpkg::Use-Pty=0 update
+
+echo "### IPXE Sec autoinstallation ###"
+echo "installation of requirements"
+
+apt-get -qq -o=Dpkg::Use-Pty=0 install -y ipxe syslinux isolinux
+
+#make ipxe folder structure
+mkdir -pv /srv/pxeboot/{config,firmware,os-images}
+cp -v /usr/lib/ipxe/{ipxe.pxe,undionly.kpxe,undionly.kkpxe,ipxe.efi} /srv/pxeboot/firmware/
+
+chown -R dnsmasq /srv/pxeboot/firmware/*
+
+cat >> /srv/pxeboot/config/boot.ipxe << 'EOF'
+#!ipxe
+echo run boot.ipxe
+set esc:hex 1b
+# HTTP Server definition
+set http-server 192.168.2.1
+set http-ipxe-directory config
+# HTTP BOOT URL
+set httpboot-url http://$${http-server}/$${http-ipxe-directory}/menu.ipxe
+
+set menu-url $${httpboot-url}
+set menu-default start
+
+chain --replace --autofree $${menu-url}
+
+EOF
+
+cat >> /srv/pxeboot/config/menu.ipxe << 'EOF'
+#!ipxe
+
+set menu-timeout 30000
+set submenu-timeout $${menu-timeout}
+set menu-default none
+
+#test client x64 ou arch i386
+cpuid --ext 29 && set arch amd64 || set arch i386
+
+# Main Menu
+
+:start
+menu
+item --gap --             ---------- Operating Systems ----------
+item --key i menu-install Installers 
+item --gap --             ----------    Apreseed/
+item reboot               Reboot
+item --key x exit        Exit iPXE boot bios
+
+choose --timeout $${menu-timeout} --default $${menu-default} selected && goto $${selected} || goto cancel
+
+:cancel
+echo You cencelled the menu, dropping you to a shell
+shell
+
+:reboot
+reboot
+EOF
+
+cat >> /etc/dnsmasq.conf << EOF
+
+#add tftp for ipxe
+enable-tftp
+tftp-root=/srv/pxeboot/firmware
+#limit  file serve par dnsmasq only
+tftp-secure
+# Slower speed but fixes broken tftp clients
+tftp-no-blocksize
+# uniq port for tftp, to allow filtering port
+tftp-single-port
+# tftp port range, at least we can filter them
+#tftp-port-range=26490,26999
+
+
+#Detect clients, tag them before doing anything
+dhcp-match=set:bios-x86,option:client-arch,0 #BIOS legacy
+dhcp-match=set:efi-x86_32,option:client-arch,6 #UEFI32
+dhcp-match=set:efi-x86_64,option:client-arch,7 #UEFI64
+dhcp-match=set:efi-x86_64,option:client-arch,9 #EBC same as UEFI64
+dhcp-match=set:X86-64_EFI_HTTP,option:client-arch,16 #UEFI64 HTTP
+dhcp-match=set:iPXE,175 #iPXE Boot
+
+# CERT VU#598349 Vulnerability Mitigation
+dhcp-name-match=set:wpad-ignore,wpad
+dhcp-ignore-names=tag:wpad-ignore
+
+# load the good PXE boot loader base on architecture
+dhcp-boot=tag:bios-x86,undionly.kpxe #BIOS legacy support
+dhcp-boot=tag:efi-x86_32,ipxe_32-bit.efi #UEFI32
+dhcp-boot=tag:efi-x86_64,ipxe.efi #UEFI64
+
+#iPXE request do it on http
+dhcp-boot=tag:iPXE, http://192.168.2.1/config/boot.ipxe
+
+
+
+# uncomment to not support Legacy boot or UEFI32
+#pxe-prompt=tag:!iPXE, "ERROR: Unsupported client"
+#pxe-service=tag:!iPXE,tag:BIOS,X86PC,"Legacy clients are not supported.", 1, 0.0.0.0
+#pxe-service=tag:!iPXE,tag:UEFI32,X86PC,"UEFI32 clients are not supported.", 1, 0.0.0.0
+
+#dhcp-userclass=set:iPXE,iPXE
+#dhcp-option=lan,tag:X86-64_EFI_HTTP,tag:!iPXE,option:bootfile-name,http://192.168.2.1/firmware/pxe.efi
+#dhcp-option=lan,tag:X86-64_EFI_HTTP,tag:!iPXE,option:vendor-class,HTTPClient
+
+EOF
+
+systemctl restart dnsmasq
+
+echo "nginx"
+apt-get -qq -o=Dpkg::Use-Pty=0 install -y nginx
+#setup nginx
+systemctl stop nginx.service
+echo "setup nginx"
+unlink /etc/nginx/sites-enabled/default
+
+cat > /etc/nginx/sites-available/ipxe.conf << EOF
+server {
+        listen 80;
+        #uncomment if you have DNS
+        #server_name $${HOSTNAME}.$${DOMAIN};
+
+        access_log /var/log/nginx/ipxe-access.log;
+        error_log /var/log/nginx/ipxe-error.log;
+
+        root /srv/pxeboot;
+        index index.html index.htm;
+	    autoindex on;
+        allow all;
+
+}
+EOF
+
+ln -s /etc/nginx/sites-available/ipxe.conf /etc/nginx/sites-enabled/ipxe.conf
+
+echo "start nginx"
+systemctl start nginx.service
+
+##debug disable ufw
+#ufw disable

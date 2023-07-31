@@ -1,0 +1,71 @@
+#cloud-config
+autoinstall:
+  version: 1
+#  interactive-sections:
+#    - storage
+  locale: en_US
+  keyboard:
+    layout: fr
+    variant: fr
+  network:
+    network:
+      version: 2
+      ethernets:
+        ens192:
+          dhcp4: true
+  apt:
+      preserve_sources_list: false
+      primary:
+          - arches: [amd64]
+  # if you need to add custom ubuntu repository
+  #          uri: "http://192.168.1.211:8081/repository/ubuntu-2104/"
+  #         - arches: [default]
+  #           uri: "http://ports.ubuntu.com/ubuntu-ports"
+  #     geoip: false
+  #       disable_suites: [backports]
+  #       sources:
+  #         localrepokey:
+  #           key: | # full key as block (fake key just for documentation)
+  #             -----BEGIN PGP PUBLIC KEY BLOCK-----
+  #             Version: GnuPG v1
+
+  #             SDsdsdskdlsdlskexstGsKD7McXZgd58oN68KquARLBl6rjA2vdhwl77KkPPOr3O
+  #             RwIbDAAKCRBA+SDeDeedcsdcdfddscsdddffdcsyGQ2/mhqidES4MwCggqQyo+w1
+  #             Twx6DKLF+3rF5nf1F3Q=
+  #             =PBAe
+  #             -----END PGP PUBLIC KEY BLOCK-----
+  # custom storage based on ANSSI recommandation 
+  # https://www.ssi.gouv.fr/en/guide/configuration-recommendations-of-a-gnulinux-system/ 
+  # mount option not working on ubuntu have to be fix
+  storage:
+    config:
+    - { ptable: gpt, path: /dev/sda, wipe: superblock, preserve: false, name: '', grub_device: false, type: disk, id: disk-sda }
+    - { device: disk-sda, size: 536870912, wipe: superblock, flag: boot, number: 1, preserve: false, grub_device: true, type: partition, id: partition-efi }
+    - { fstype: fat32, volume: partition-efi, preserve: false, type: format, id: format-efi }
+    - { device: disk-sda, size: 1073741824, wipe: superblock, flag: '', number: 2, preserve: false, grub_device: false, type: partition, id: partition-boot }
+    - { fstype: ext4, volume: partition-boot, preserve: false, type: format, id: format-boot }
+    - { device: disk-sda, size: -1, wipe: superblock, flag: '', number: 3, preserve: false, grub_device: false, type: partition, id: partition-lvm }
+    - { name: ubuntu-vg, devices: [ partition-lvm ], preserve: false, type: lvm_volgroup, id: lvm_volgroup-0 }
+    - { name: ubuntu-lv, volgroup: lvm_volgroup-0, size: 10G, wipe: superblock, preserve: false, type: lvm_partition, id: lvm_partition-lvroot }
+    - { fstype: ext4, volume: lvm_partition-lvroot, preserve: false, type: format, id: format-lvmroot }
+    - { path: /, device: format-lvmroot, type: mount, id: mount-lvmroot }
+    - { path: /boot, device: format-boot, type: mount, id: mount-boot }
+    - { path: /boot/efi, device: format-efi, type: mount, id: mount-efi }
+  identity:
+    hostname: u2210EFIsrv
+    username: osadmin #your username
+    password: "$6$wBl/O1L7k/hvij.F$Rhx2SzX7hIHSrnbdWp1O/hzwPl28oOI/y/ZEGxwh53/2qyen./Lv/Fn57/Kt1FVQ5r1IxDg66wd.JltGMzG5T1"
+  packages:
+    - open-vm-tools
+    - screen
+    - vim
+    - iptables-persistent
+    - cloud-init
+  refresh-installer:
+    update: yes
+  ssh:
+    install-server: true
+  user-data:
+    disable_root: false
+  #late-commands:
+  #  - echo 'ubuntu ALL=(ALL) NOPASSWD:ALL' > /target/etc/sudoers.d/ubuntu

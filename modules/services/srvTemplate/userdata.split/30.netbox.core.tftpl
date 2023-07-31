@@ -1,0 +1,171 @@
+#!/bin/sh
+
+SERVICEDNSNAME="${servicednsname}"
+SYSUSER="${sysuser}"
+SYSGROUP="${sysgroup}"
+DBNAME="${dbname}"
+DBLOGIN="${dblogin}"
+DBPASSWORD="${dbpassword}"
+ADMINPASS="${adminpass}"
+ADMINACCOUNT="${adminaccount}"
+SECRETKEY="${secretkey}"
+
+NICME="${nicme}"
+
+#local variable
+# get ip addresse from the one who can go out
+IPADDR=$(ip route get 8.8.8.8 | awk -F"src " 'NR==1{split($2,a," ");print a[1]}')
+
+
+
+# -qq -o=Dpkg::Use-Pty=0 # option to make apt less verbose -qq for apt and -o=dpkg for apt forking to dpkg to install package
+DEBIAN_FRONTEND=noninteractive
+echo "update source list"
+apt-get -qq -o=Dpkg::Use-Pty=0 update
+
+echo "### Netbox autoinstallation ###"
+echo "installation of requirements"
+echo "postgresql installation"
+apt-get -qq -o=Dpkg::Use-Pty=0 install -y postgresql postgresql-contrib libpq-dev
+echo "redis server"
+apt-get -qq -o=Dpkg::Use-Pty=0 install -y redis-server
+echo "python dependency"
+apt-get -qq -o=Dpkg::Use-Pty=0 install -y python3 python3-pip python3-venv python3-dev build-essential libxml2-dev libxslt1-dev libffi-dev libpq-dev libssl-dev zlib1g-dev
+
+echo "nginx"
+apt-get -qq -o=Dpkg::Use-Pty=0 install -y nginx
+
+echo "pip install and upgrade"
+pip3 install -q --upgrade pip
+
+echo "## Stop Services ##"
+echo "nginx"
+systemctl stop nginx.service
+echo "postgresql"
+systemctl stop postgresql.service
+
+echo "## Do stuff ##"
+echo "download and unpack netbox"
+
+cd /tmp
+NETBOX_RELEASE=`curl -s https://api.github.com/repos/netbox-community/netbox/releases/latest | grep -i tag_name | cut -d '"' -f 4`
+curl -s https://api.github.com/repos/netbox-community/netbox/releases/latest | grep tarball_url | cut -d '"' -f 4 | xargs wget -O netbox.$${NETBOX_RELEASE}.tar.gz
+
+tar -xzf netbox.$${NETBOX_RELEASE}.tar.gz -C /opt
+NETBOX_FOLDER_TAR=`tar -tzf netbox.$${NETBOX_RELEASE}.tar.gz | head -1 | cut -f1 -d"/"`
+ln -s /opt/$${NETBOX_FOLDER_TAR} /opt/netbox
+
+echo "postgresql setup"
+PGVERSION=`psql --version | cut -d" " -f3| cut -d"." -f1`
+echo password_encryption = scram-sha-256 >> /etc/postgresql/$${PGVERSION}/main/postgresql.conf
+
+echo "local    $DBNAME      $DBLOGIN    scram-sha-256" >> /etc/postgresql/$${PGVERSION}/main/pg_hba.conf
+
+echo "start postgresql service"
+systemctl start postgresql.service
+
+echo "role creation for netbox"
+su postgres <<EOF
+psql -c "CREATE ROLE $DBLOGIN WITH LOGIN PASSWORD '$DBPASSWORD';"
+EOF
+
+echo "database creation"
+su postgres <<EOF
+psql -c "CREATE DATABASE $DBNAME  WITH OWNER $DBLOGIN;"
+EOF
+
+echo "grand privileges"
+su postgres <<EOF
+psql -c "GRANT ALL PRIVILEGES ON DATABASE $DBNAME  TO $DBLOGIN;"
+EOF
+
+
+echo "create netbox group and user"
+groupadd -g 5000 --system $SYSGROUP
+useradd \
+   -g 5000 \
+   -u 5000 \
+   --system \
+   --shell /bin/bash \
+   --home /opt/netbox \
+   $SYSUSER
+
+echo "fix permission"
+chown --recursive $${SYSUSER}.$${SYSGROUP} /opt/netbox/netbox/media
+
+echo "### Netbox Setup ###"
+echo "setup config file"
+cd /opt/netbox/netbox/netbox/
+cp configuration.example.py configuration.py
+
+sed -i "s/ALLOWED_HOSTS.*/ALLOWED_HOSTS = ['\*']/g" configuration.py
+sed -i "/^DATABASE/,/^}/{s/'NAME': 'netbox'/'NAME': '$DBNAME'/g}" configuration.py
+sed -i "/^DATABASE/,/^}/{s/'USER': ''/'USER': '$DBLOGIN'/g}" configuration.py
+sed -i "/^DATABASE/,/^}/{s/'PASSWORD': ''/'PASSWORD': '$DBPASSWORD'/g}" configuration.py
+sed -i "s/SECRET_KEY = ''/SECRET_KEY = '$SECRETKEY'/g" configuration.py
+
+echo "netbox installation"
+bash /opt/netbox/upgrade.sh
+
+echo "setup guinicorn"
+cp /opt/netbox/contrib/gunicorn.py /opt/netbox/gunicorn.py
+
+echo "create systemd required units files"
+cp -v /opt/netbox/contrib/*.service /etc/systemd/system/
+
+echo "reload systemd daemon list"
+systemctl daemon-reload
+
+echo "netbox create superuser"
+su root -s /bin/bash <<EOF
+source /opt/netbox/venv/bin/activate
+cd /opt/netbox/netbox
+export DJANGO_SUPERUSER_PASSWORD="$${ADMINPASS}"
+python3 manage.py createsuperuser --username $${ADMINACCOUNT} --email nomail@$${SERVICEDNSNAME#*.} --noinput
+deactivate
+EOF
+
+#setup nginx
+echo "setup nginx"
+unlink /etc/nginx/sites-enabled/default
+
+cat > /etc/nginx/sites-available/netbox-reverse-proxy.conf << EOF
+server {
+        listen 80;
+        #uncomment if you have DNS
+        server_name $${SERVICEDNSNAME};
+
+        client_max_body_size 25m;
+
+        access_log /var/log/nginx/reverse-access.log;
+        error_log /var/log/nginx/reverse-error.log;
+
+        location /static/ {
+        alias /opt/netbox/netbox/static/;
+        }
+
+        location / {
+        proxy_pass http://127.0.0.1:8001;
+        proxy_set_header X-Forwarded-Host \$http_host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+        }
+}
+EOF
+
+ln -s /etc/nginx/sites-available/netbox-reverse-proxy.conf /etc/nginx/sites-enabled/netbox-reverse-proxy.conf
+
+
+echo "start netbox service"
+systemctl start netbox.service
+
+echo "start nginx"
+systemctl start nginx.service
+
+#enable at boot
+echo "enable at boot services"
+systemctl enable nginx.service
+systemctl enable netbox.service
+systemctl enable netbox
+systemctl enable netbox-rq
+

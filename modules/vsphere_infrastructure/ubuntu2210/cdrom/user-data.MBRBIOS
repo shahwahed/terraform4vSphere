@@ -1,0 +1,118 @@
+#cloud-config
+autoinstall:
+  version: 1
+#  interactive-sections:
+#    - storage
+  locale: en_US
+  keyboard:
+    layout: fr
+    variant: fr
+  network:
+    network:
+      version: 2
+      ethernets:
+        ens192:
+          dhcp4: true
+  apt:
+      preserve_sources_list: false
+      primary:
+          - arches: [amd64]
+  # if you need to add custom ubuntu repository
+  #          uri: "http://192.168.1.211:8081/repository/ubuntu-2104/"
+  #         - arches: [default]
+  #           uri: "http://ports.ubuntu.com/ubuntu-ports"
+  #     geoip: false
+  #       disable_suites: [backports]
+  #       sources:
+  #         localrepokey:
+  #           key: | # full key as block (fake key just for documentation)
+  #             -----BEGIN PGP PUBLIC KEY BLOCK-----
+  #             Version: GnuPG v1
+
+  #             SDsdsdskdlsdlskexstGsKD7McXZgd58oN68KquARLBl6rjA2vdhwl77KkPPOr3O
+  #             RwIbDAAKCRBA+SDeDeedcsdcdfddscsdddffdcsyGQ2/mhqidES4MwCggqQyo+w1
+  #             Twx6DKLF+3rF5nf1F3Q=
+  #             =PBAe
+  #             -----END PGP PUBLIC KEY BLOCK-----
+  # custom storage based on ANSSI recommandation 
+  # https://www.ssi.gouv.fr/en/guide/configuration-recommendations-of-a-gnulinux-system/ 
+  # mount option not working on ubuntu have to be fix
+  storage:
+    config:
+    - {ptable: gpt, path: /dev/sda, wipe: superblock, preserve: false, name: '', grub_device: true,
+      type: disk, id: disk-sda}
+    - {device: disk-sda, size: 1048576, flag: bios_grub, number: 1, preserve: false,
+      type: partition, id: partition-0}
+    - {device: disk-sda, size: 1073741824, wipe: superblock, flag: '', number: 2,
+      preserve: false, type: partition, id: partition-boot}
+    - {fstype: ext4, volume: partition-boot, preserve: false, type: format, id: format-boot}
+    - {device: disk-sda, size: -1, wipe: superblock, flag: '', number: 3,
+      preserve: false, type: partition, id: partition-2}
+    - name: ubuntu-vg
+      devices: [partition-2]
+      preserve: false
+      type: lvm_volgroup
+      id: lvm_volgroup-0
+    - {name: lv-root, volgroup: lvm_volgroup-0, size: 3GB, preserve: false,
+      type: lvm_partition, id: lvm_root}
+    - {name: lv-var, volgroup: lvm_volgroup-0, size: 2GB, preserve: false,
+      type: lvm_partition, id: lvm_var}
+    - {name: lv-swap, volgroup: lvm_volgroup-0, size: 4GB, preserve: false,
+      type: lvm_partition, id: lvm_swap}
+    - {name: lv-tmp, volgroup: lvm_volgroup-0, size: 3GB, preserve: false,
+      type: lvm_partition, id: lvm_tmp}
+    - {name: lv-home, volgroup: lvm_volgroup-0, size: 4GB, preserve: false,
+      type: lvm_partition, id: lvm_home}
+    - {name: lv-opt, volgroup: lvm_volgroup-0, size: 1GB, preserve: false,
+      type: lvm_partition, id: lvm_opt}
+    - {name: lv-usr, volgroup: lvm_volgroup-0, size: 6GB, preserve: false,
+      type: lvm_partition, id: lvm_usr}
+    - {name: lv-var-log, volgroup: lvm_volgroup-0, size: 2GB, preserve: false,
+      type: lvm_partition, id: lvm_var_log}
+    - {name: lv-var-tmp, volgroup: lvm_volgroup-0, size: 2GB, preserve: false,
+      type: lvm_partition, id: lvm_var_tmp}
+    - {name: lv-var-apt-cache, volgroup: lvm_volgroup-0, size: 1GB, preserve: false,
+      type: lvm_partition, id: lvm_var_apt_cache}
+    - {name: lv-srv, volgroup: lvm_volgroup-0, size: 1GB, preserve: false,
+      type: lvm_partition, id: lvm_srv}
+    - {fstype: ext4, volume: lvm_root, preserve: false, type: format, id: format-root, label: root}
+    - {fstype: ext4, volume: lvm_var, preserve: false, type: format, id: format-var, label: var}
+    - {fstype: swap, volume: lvm_swap, preserve: false, type: format, id: format-swap}
+    - {fstype: ext4, volume: lvm_tmp, preserve: false, type: format, id: format-tmp, label: tmp}
+    - {fstype: ext4, volume: lvm_home, preserve: false, type: format, id: format-home, label: home}
+    - {fstype: ext4, volume: lvm_opt, preserve: false, type: format, id: format-opt, label: opt}
+    - {fstype: ext4, volume: lvm_usr, preserve: false, type: format, id: format-usr, label: usr}
+    - {fstype: ext4, volume: lvm_var_log, preserve: false, type: format, id: format-var_log, label: var_log}
+    - {fstype: ext4, volume: lvm_var_tmp, preserve: false, type: format, id: format-var_tmp, label: var_tmp}
+    - {fstype: ext4, volume: lvm_var_apt_cache, preserve: false, type: format, id: format-var_apt_cache, label: var_apt_cache}
+    - {fstype: ext4, volume: lvm_srv, preserve: false, type: format, id: format-srv, labe: srv}
+    - {device: format-root, path: /, type: mount, id: mount-root}
+    - {device: format-boot, path: /boot, type: mount, id: mount-boot, options: nosuid,nodev,noexec}
+    - {device: format-var, path: /var, type: mount, id: mount-var}
+    - {device: format-swap, path: none, type: mount, id: mount-swap}
+    - {device: format-tmp, path: /tmp, type: mount, id: mount-tmp, options: nosuid,nodev,noexec}
+    - {device: format-home, path: /home, type: mount, id: mount-home, options: nosuid,nodev,noexec}
+    - {device: format-opt, path: /opt, type: mount, id: mount-opt, options: nosuid,nodev}
+    - {device: format-usr, path: /usr, type: mount, id: mount-usr, options: nodev}
+    - {device: format-var_log, path: /var/log, type: mount, id: mount-var_log, options: nosuid,nodev,noexec}
+    - {device: format-var_tmp, path: /var/tmp, type: mount, id: mount-var_tmp, options: nosuid,nodev,noexec}
+    - {device: format-var_apt_cache, path: /var/apt/cache, type: mount, id: mount-var_apt_cache}
+    - {device: format-srv, path: /srv, options: nosuid,nodev, type: mount, id: mount-srv}
+  identity:
+    hostname: u2104srv
+    username: osadmin #your username
+    password: "$6$wBl/O1L7k/hvij.F$Rhx2SzX7hIHSrnbdWp1O/hzwPl28oOI/y/ZEGxwh53/2qyen./Lv/Fn57/Kt1FVQ5r1IxDg66wd.JltGMzG5T1"
+  packages:
+    - open-vm-tools
+    - screen
+    - vim
+    - iptables-persistent
+    - cloud-init
+  refresh-installer:
+    update: yes
+  ssh:
+    install-server: true
+  user-data:
+    disable_root: false
+  #late-commands:
+  #  - echo 'ubuntu ALL=(ALL) NOPASSWD:ALL' > /target/etc/sudoers.d/ubuntu

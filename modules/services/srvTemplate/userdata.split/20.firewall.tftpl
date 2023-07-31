@@ -1,0 +1,49 @@
+#!/bin/bash
+
+#firewall port should be in form <port/proto> or service, multiple separate with comma 
+# example :
+# FIREWALL_PORT="22/tcp"
+# FIREWALL_PORT="22/tcp,443/tcp"
+# FIREWALL_PORT="ssh,443/tcp"
+#
+FIREWALL_PORT_IN="${firewall_ports_in}"
+FIREWALL_PORT_OUT="${firewall_ports_out}"
+
+
+# -qq -o=Dpkg::Use-Pty=0 # option to make apt less verbose -qq for apt and -o=dpkg for apt forking to dpkg to install package
+DEBIAN_FRONTEND=noninteractive
+#wait for apt finish
+while fuser /var/lib/dpkg/lock >/dev/null 2>&1 ; do
+    echo "wait for another apt"
+    sleep 0.5
+done 
+echo "firewall"
+apt-get -qq -o=Dpkg::Use-Pty=0 install -y ufw
+
+sed -i -e 's/^IPV6=yes/IPV6=no/' /etc/default/ufw
+
+systemctl start ufw.service
+
+#set firewall using ufw
+echo "set firewall rules"
+ufw default deny
+ufw default deny incoming
+ufw default deny outgoing
+
+for port in $${FIREWALL_PORT_IN//,/ }
+do
+  ufw allow in $port
+done
+
+for port in $${FIREWALL_PORT_OUT//,/ }
+do
+  ufw allow out $port
+done
+
+echo "activate firewall"
+ufw enable
+
+#enable at boot
+echo "enable firewall at boot"
+systemctl enable ufw.service
+

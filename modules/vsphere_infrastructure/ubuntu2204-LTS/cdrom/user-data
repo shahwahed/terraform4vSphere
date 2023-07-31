@@ -1,0 +1,79 @@
+#cloud-config
+autoinstall:
+  version: 1
+  locale: en_US
+  keyboard:
+    layout: fr
+    #variant: fr
+  network:
+    network:
+      version: 2
+      ethernets:
+        ens192:
+          dhcp4: true
+  storage:
+    grub:
+      reorder_uefi: False
+    swap:
+      size: 0
+    config:
+    - {type: disk, id: disk-sda, ptable: gpt, path: /dev/sda, preserve: false, wipe: superblock-recursive, name: '', grub_device: false}
+    - {type: partition, device: disk-sda, size: 512MB, number: 1, partition_type: EF00, wipe: superblock, flag: boot, preserve: false, grub_device: true, id: partition-efi}
+    - {type: partition, device: disk-sda, size: 768MB, number: 2, wipe: superblock, flag: linux, preserve: false, grub_device: false, id: partition-boot}
+    - {type: partition, device: disk-sda, size: -1, number: 3, preserve: false, flag: linux, grub_device: false, id: partition-lvm}
+    - { name: ubuntu-vg, devices: [ partition-lvm ], preserve: false, type: lvm_volgroup, id: lvm_volgroup-0 }
+    - { name: ubuntu-lv, volgroup: lvm_volgroup-0, size: 10G, wipe: superblock, preserve: false, type: lvm_partition, id: lvroot }
+    - {type: format, fstype: ext4, volume: partition-boot, preserve: false, label:'', id: format-boot}
+    - {type: format, fstype: fat32, volume: partition-efi, preserve: false, label:'', id: format-efi}
+    - {type: format, fstype: ext4, volume: lvroot, preserve: false, label:'', id: format-root}
+    - {type: mount, device: format-root, path: /, id: mount-root}
+    - {type: mount, device: format-boot, path: /boot, id: mount-boot}
+    - {type: mount, device: format-efi, path: /boot/efi, id: mount-efi}
+
+  apt:
+    preserve_sources_list: false
+    mirrror-selection:
+      primary:
+      - country-mirror
+      - arches: [amd64]
+        uri: "https://mirror.ubuntu.ikoula.com/"
+      - arches: [amd64]
+        uri: "http://ports.ubuntu.com/ubuntu-ports"
+      fallback: abord
+      geoip: true
+# if you need to add custom ubuntu repository
+  #          uri: "http://192.168.1.211:8081/repository/ubuntu-2104/"
+  #         - arches: [default]
+  #           uri: "http://ports.ubuntu.com/ubuntu-ports"
+  #     geoip: false
+  #       disable_suites: [backports]
+  #       sources:
+  #         localrepokey:
+  #           key: | # full key as block (fake key just for documentation)
+  #             -----BEGIN PGP PUBLIC KEY BLOCK-----
+  #             Version: GnuPG v1
+
+  #             SDsdsdskdlsdlskexstGsKD7McXZgd58oN68KquARLBl6rjA2vdhwl77KkPPOr3O
+  #             RwIbDAAKCRBA+SDeDeedcsdcdfddscsdddffdcsyGQ2/mhqidES4MwCggqQyo+w1
+  #             Twx6DKLF+3rF5nf1F3Q=
+  #             =PBAe
+  #             -----END PGP PUBLIC KEY BLOCK-----
+
+  identity:
+    hostname: u2210EFIsrv
+    username: osadmin #your username
+    password: "$6$4MCdtISJPlKwOAKT$adFIn8Xud7bOlK.UbXVzf6fY4Gnt5AUau3/h7uMJQXrnbJpLWdbbBz0k4OWY8Fa8XuiViFGuaDembTdq2VOa2."
+  packages:
+    - open-vm-tools
+    - screen
+    - vim
+    - iptables-persistent
+    - cloud-init
+  refresh-installer:
+    update: yes
+  ssh:
+    install-server: true
+  user-data:
+    disable_root: false
+  #late-commands:
+  #  - echo 'ubuntu ALL=(ALL) NOPASSWD:ALL' > /target/etc/sudoers.d/ubuntu

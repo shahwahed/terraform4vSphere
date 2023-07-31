@@ -1,0 +1,168 @@
+#!/bin/sh
+
+
+SERVICEDNSNAME="${servicednsname}"
+ACMEPKI="${acmepki}"
+ROOTCAFINGERPRINT="${rootcafingerprint}"
+CA_SSHCLIENT_PUBKEY="${ca_ssh_client_pubkey}"
+PROVISIONERPASS="${provisionerpassword}"
+PROVISIONERNAME="${provisionername}"
+HARBOR_ADM_PASSWORD="${harbor_adm_password}"
+HARBOR_DB_PASSWORD="${harbor_db_password}"
+
+HARBOR_DATA_PARTITON_MOUNT="/srv/harbor"
+HARBOR_DATA_PATH="$${HARBOR_DATA_PARTITON_MOUNT}/data"
+HARBOR_TRUSTKEY="644FF454C0B4115C"
+
+
+
+#create harbor data partition
+parted -s -a optimal -- /dev/sdb mklabel gpt
+parted -s -a optimal -- /dev/sdb mkpart primary 0% 100%
+parted -s -- /dev/sdb align-check optimal 1
+pvcreate /dev/sdb1
+vgcreate vgdata /dev/sdb1
+lvcreate -n harbor_data -l +100%FREE vgdata
+mkfs.ext4 /dev/vgdata/harbor_data
+mkdir -p $HARBOR_DATA_PARTITON_MOUNT
+echo "/dev/vgdata/harbor_data $${HARBOR_DATA_PARTITON_MOUNT} ext4 defaults 0 0" | sudo tee -a /etc/fstab
+mount -av
+mkdir -p $HARBOR_DATA_PATH
+
+
+
+
+# -qq -o=Dpkg::Use-Pty=0 # option to make apt less verbose -qq for apt and -o=dpkg for apt forking to dpkg to install package
+DEBIAN_FRONTEND=noninteractive
+echo "update source list"
+apt-get -qq -o=Dpkg::Use-Pty=0 update
+
+apt-get -qq -o=Dpkg::Use-Pty=0 install -y acl
+
+
+#install docker dependencies and grap latest harbor, should be from internal source
+tmp_dir=$(mktemp -d -t harbor-XXXXXX)
+cd "$${tmp_dir}"
+mkdir gnupg
+chmod -R 700 gnupg
+
+# install docker could/should be replace by podman
+
+curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg
+echo \
+  "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/ubuntu \
+  $(lsb_release -cs) stable" | tee /etc/apt/sources.list.d/docker.list > /dev/null
+
+apt-get -qq -o=Dpkg::Use-Pty=0 update
+apt-get -qq -o=Dpkg::Use-Pty=0 install -y docker-ce docker-ce-cli containerd.io
+
+# change docker /var/lib/docker to another location due to restricted space on /var/lib/docker
+
+systemctl stop docker.service
+systemctl stop docker.socket
+
+mkdir -p $${HARBOR_DATA_PARTITON_MOUNT}/lib/docker
+sed -i -E "s|^(ExecStart=/usr/bin/dockerd)|ExecStart=/usr/bin/dockerd -g $${HARBOR_DATA_PARTITON_MOUNT}/lib/docker|g" /lib/systemd/system/docker.service
+
+systemctl daemon-reload
+#dont start docker we will start it later
+#systemctl start docker
+
+### add docker compose binary
+
+curl -s https://api.github.com/repos/docker/compose/releases/latest | grep browser_download_url | cut -d '"' -f 4 | grep -i "docker-compose-$(uname -s)-$(uname -m)" | wget -nv -i -
+
+sha256sum -c docker-compose-$(uname -s|tr [:upper:] [:lower:])-$(uname -m).sha256
+
+if [ $? -eq 0 ]
+then
+        cp docker-compose-$(uname -s|tr [:upper:] [:lower:])-$(uname -m) /usr/local/bin/docker-compose
+        chmod +x /usr/local/bin/docker-compose
+        ln -s /usr/local/bin/docker-compose /usr/bin/docker-compose
+        echo "Docker Compose Installation done"
+else
+        echo "Docker Compose signature error"
+        exit 1
+fi
+
+curl -s https://api.github.com/repos/goharbor/harbor/releases/latest | grep browser_download_url | grep offline | cut -d '"' -f 4 | grep '\.tgz' | wget -nv -i -
+#curl -s https://api.github.com/repos/goharbor/harbor/releases/latest | grep browser_download_url | grep offline | cut -d '"' -f 4 | grep '\.tgz.asc$' | wget -nv -i -
+
+gpg --homedir "$${tmp_dir}/gnupg" --no-default-keyring --keyring "$${tmp_dir}/gnupg/pubring.kbx" --keyserver hkps://keyserver.ubuntu.com --receive-keys $${HARBOR_TRUSTKEY}
+gpg --homedir "$${tmp_dir}/gnupg" --no-default-keyring --keyring "$${tmp_dir}/gnupg/pubring.kbx" --verify harbor-offline-installer-*.tgz.asc
+
+if [ $? -eq 0 ] 
+then
+        mkdir -p $${HARBOR_DATA_PARTITON_MOUNT}/installer
+        tar xzvf harbor-offline-installer-*.tgz -C $${HARBOR_DATA_PARTITON_MOUNT}/installer
+else
+        echo "harbor installer signature check error"
+        exit 1
+fi
+
+
+#
+echo "generate certificate from internal ACME"
+certbot -n certonly \
+           --standalone \
+           --agree-tos \
+           -d $${SERVICEDNSNAME} \
+           --server https://$${ACMEPKI}/acme/acme/directory \
+           --email nomail@$${SERVICEDNSNAME#*.} \
+           --rsa-key-size 4096 
+
+mkdir -p /etc/docker/certs.d/$${SERVICEDNSNAME}
+cp /etc/letsencrypt/live/$${SERVICEDNSNAME}/fullchain.pem /etc/docker/certs.d/$${SERVICEDNSNAME}/$${SERVICEDNSNAME}.cert
+cp /etc/letsencrypt/live/$${SERVICEDNSNAME}/privkey.pem /etc/docker/certs.d/$${SERVICEDNSNAME}/$${SERVICEDNSNAME}.key
+cp /usr/local/share/ca-certificates/$${PROVISIONERNAME}* /etc/docker/certs.d/$${SERVICEDNSNAME}/ca.crt
+
+systemctl start docker
+
+
+cd $${HARBOR_DATA_PARTITON_MOUNT}/installer
+cd harbor
+
+#generate config file
+
+sed -i "s/reg.mydomain.com/$${SERVICEDNSNAME}/g" harbor.yml
+sed -i -E "s/^(harbor_admin_password:)[[:print:]]*$/\1 $${HARBOR_ADM_PASSWORD}/g" harbor.yml
+sed -i -E "s/^(  password:)[[:print:]]*$/\1 $${HARBOR_DB_PASSWORD}/g" harbor.yml
+sed -i -E "s|^(data_volume:)[[:print:]]*$|\1 $${HARBOR_DATA_PATH}|g" harbor.yml
+sed -i -E "s|^(  certificate:)[[:print:]]*$|\1 /etc/letsencrypt/live/$${SERVICEDNSNAME}/fullchain.pem|g" harbor.yml
+sed -i -E "s|^(  private_key:)[[:print:]]*$|\1 /etc/letsencrypt/live/$${SERVICEDNSNAME}/privkey.pem|g" harbor.yml
+
+sed -i '/^http:/s/^/#/g' harbor.yml
+sed -i '/port: 80/s/^/#/g' harbor.yml
+sed -i '/http_proxy:/s/^/#/g' harbor.yml
+
+
+#prepare install harbor
+./prepare && ./install.sh --with-notary --with-clair --with-chartmuseum
+
+#fix docker-compose for harbor to not listen on port 80 for certbot
+sed -i '/80:8080/d' docker-compose.yml
+
+#create systemd for harbor docker compose
+
+cat > /etc/systemd/system/harbor.service <<-EOF
+[Unit]
+Description=Harbor
+After=docker.service systemd-networkd.service systemd-resolved.service
+Requires=docker.service
+Documentation=https://goharbor.io/docs/
+
+[Service]
+Type=simple
+Restart=on-failure
+RestartSec=5
+ExecStart=/usr/local/bin/docker-compose -f $${HARBOR_DATA_PARTITON_MOUNT}/installer/harbor/docker-compose.yml up
+ExecStop=/usr/local/bin/docker-compose -f $${HARBOR_DATA_PARTITON_MOUNT}/installer/harbor/docker-compose.yml down
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+#enable at boot
+systemctl enable harbor.service
+
+echo "### HARBOR READY ###"
