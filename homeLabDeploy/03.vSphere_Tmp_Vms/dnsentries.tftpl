@@ -1,0 +1,44 @@
+#!/bin/bash
+SERVICEDNSNAME="${servicednsname}"
+
+#local varable
+DOMAIN="$${SERVICEDNSNAME#*.}"
+HOSTNAME="$${SERVICEDNSNAME%%.*}"
+
+if [ "$DOMAIN" != "dns01" ]
+then
+    /usr/bin/pdnsutil add-record $DOMAIN dns01 A 192.168.1.201 
+fi
+
+if [ "$DOMAIN" != "dns02" ]
+then
+    /usr/bin/pdnsutil add-record $DOMAIN dns02 A 192.168.1.202
+fi
+
+/usr/bin/pdnsutil add-record $DOMAIN ntp01 A 192.168.1.203
+/usr/bin/pdnsutil add-record $DOMAIN pki01 A 192.168.1.204
+/usr/bin/pdnsutil add-record $DOMAIN vault01 A 192.168.1.205
+/usr/bin/pdnsutil add-record $DOMAIN vcsa8 A 192.168.1.100
+/usr/bin/pdnsutil add-record $DOMAIN esx01 A 192.168.1.101
+/usr/bin/pdnsutil add-record $DOMAIN esx02 A 192.168.1.102
+/usr/bin/pdnsutil add-record $DOMAIN esx03 A 192.168.1.103
+/usr/bin/pdnsutil add-record $DOMAIN esxrpi01 A 192.168.1.104
+/usr/bin/pdnsutil increase-serial $DOMAIN
+
+
+if [ "$DOMAIN" != "dns01"]
+/usr/bin/pdnsutil add-record 1.168.192.in-addr.arpa 201 PTR dns01.$DOMAIN
+fi
+if [ "$DOMAIN" != "dns02"]
+/usr/bin/pdnsutil add-record 1.168.192.in-addr.arpa 202 PTR dns02.$DOMAIN
+fi
+/usr/bin/pdnsutil add-record 1.168.192.in-addr.arpa 100 PTR vcsa8.$DOMAIN
+/usr/bin/pdnsutil add-record 1.168.192.in-addr.arpa 203 PTR ntp01.$DOMAIN
+/usr/bin/pdnsutil add-record 1.168.192.in-addr.arpa 204 PTR pki01.$DOMAIN
+/usr/bin/pdnsutil add-record 1.168.192.in-addr.arpa 205 PTR vault01.$DOMAIN
+/usr/bin/pdnsutil add-record 1.168.192.in-addr.arpa 101 PTR esx01.$DOMAIN
+/usr/bin/pdnsutil add-record 1.168.192.in-addr.arpa 102 PTR esx02.$DOMAIN
+/usr/bin/pdnsutil add-record 1.168.192.in-addr.arpa 103 PTR esx03.$DOMAIN
+/usr/bin/pdnsutil add-record 1.168.192.in-addr.arpa 104 PTR esxrpi01.$DOMAIN
+/usr/bin/pdnsutil increase-serial 1.168.192.in-addr.arpa
+
