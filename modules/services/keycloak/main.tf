@@ -34,7 +34,7 @@ resource vsphere_virtual_machine "keycloak_01" {
   }
 
   extra_config = {
-    "guestinfo.metadata"          = base64encode(templatefile("${path.module}/../srvTemplate/metadata/metadata1nicDyn.tftpl",
+    "guestinfo.metadata"          = base64encode(templatefile("${path.module}/../../srvTemplate/metadata/metadata1nicDyn.tftpl",
                                     {
                                       hostname="${var.keycloak_srv_config["hostname"]}",
                                       ipA="${var.keycloak_srv_config["ip"]}",
@@ -53,7 +53,7 @@ data template_cloudinit_config "keycloak_01" {
   base64_encode = true
 
   part {
-    content     = templatefile("${path.module}/../srvTemplate/userdata.split/10.systembase.tftpl",
+    content     = templatefile("${path.module}/../../srvTemplate/userdata.split/10.systembase.tftpl",
     {
       servicednsname="${var.keycloak_srv_config["servicednsname"]}",
     })
@@ -61,7 +61,7 @@ data template_cloudinit_config "keycloak_01" {
   }
   part {
     content_type = "text/x-shellscript"
-    content  = templatefile("${path.module}/../srvTemplate/userdata.split/20.firewall.tftpl",
+    content  = templatefile("${path.module}/../../srvTemplate/userdata.split/20.firewall.tftpl",
     {
       firewall_ports_in="22/tcp,443/tcp"
       firewall_ports_out="22/tcp,53/udp,53/tcp,80/tcp,443/tcp"
@@ -69,7 +69,7 @@ data template_cloudinit_config "keycloak_01" {
   }
   part {
     content_type = "text/x-shellscript"
-    content  = templatefile("${path.module}/../srvTemplate/userdata.split/30.keycloak.core.tftpl",
+    content  = templatefile("${path.module}/../../srvTemplate/userdata.split/30.keycloak.core.tftpl",
     {
       servicednsname="${var.keycloak_srv_config["servicednsname"]}",
       sysuser="${var.keycloak_srv_config["sysuser"]}",
@@ -83,7 +83,7 @@ data template_cloudinit_config "keycloak_01" {
   }
   part {
     content_type = "text/x-shellscript"
-    content  = templatefile("${path.module}/../srvTemplate/userdata.split/99.finalreboot.tftpl", {})
+    content  = templatefile("${path.module}/../../srvTemplate/userdata.split/99.finalreboot.tftpl", {})
   }
 }
 

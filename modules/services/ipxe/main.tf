@@ -39,7 +39,7 @@ resource vsphere_virtual_machine "ipxe_01" {
   }
 
   extra_config = {
-    "guestinfo.metadata"          = base64encode(templatefile("${path.module}/../srvTemplate/metadata/metadata2nicDyn.tftpl",
+    "guestinfo.metadata"          = base64encode(templatefile("${path.module}/../../srvTemplate/metadata/metadata2nicDyn.tftpl",
                                     {
                                       hostname="${var.ipxe_srv_config["hostname"]}",
                                       ipA="${var.ipxe_srv_config["ip"]}",
@@ -59,7 +59,7 @@ data template_cloudinit_config "ipxe_01" {
   base64_encode = true
 
   part {
-    content     = templatefile("${path.module}/../srvTemplate/userdata.split/10.systembase.tftpl",
+    content     = templatefile("${path.module}/../../srvTemplate/userdata.split/10.systembase.tftpl",
     {
       servicednsname="${var.ipxe_srv_config["servicednsname"]}",
     })
@@ -67,7 +67,7 @@ data template_cloudinit_config "ipxe_01" {
   }
   part {
     content_type = "text/x-shellscript"
-    content  = templatefile("${path.module}/../srvTemplate/userdata.split/20.firewall.tftpl",
+    content  = templatefile("${path.module}/../../srvTemplate/userdata.split/20.firewall.tftpl",
     {
       firewall_ports_in="22/tcp,67/udp,69/udp,80/tcp"
       firewall_ports_out="22/tcp,80/tcp,443/tcp,53/udp,68/udp"
@@ -75,7 +75,7 @@ data template_cloudinit_config "ipxe_01" {
   }
   part {
     content_type = "text/x-shellscript"
-    content  = templatefile("${path.module}/../srvTemplate/userdata.split/21.NAT.tftpl",
+    content  = templatefile("${path.module}/../../srvTemplate/userdata.split/21.NAT.tftpl",
     {
       dnsmasq_dhcp_clients="${var.ipxe_srv_config["dhcp_clients_netmask"]}",
       dnsmasq_range="${var.ipxe_srv_config["dhcp_clients_range"]}",
@@ -87,7 +87,7 @@ data template_cloudinit_config "ipxe_01" {
   }
   part {
     content_type = "text/x-shellscript"
-    content  = templatefile("${path.module}/../srvTemplate/userdata.split/30.ipxe.core.tftpl",
+    content  = templatefile("${path.module}/../../srvTemplate/userdata.split/30.ipxe.core.tftpl",
     {
       ipxesecserver="${var.ipxe_srv_config["servicednsname"]}",
     }
@@ -95,7 +95,7 @@ data template_cloudinit_config "ipxe_01" {
   }
   part {
     content_type = "text/x-shellscript"
-    content  = templatefile("${path.module}/../srvTemplate/userdata.split/99.finalreboot.tftpl", {})
+    content  = templatefile("${path.module}/../../srvTemplate/userdata.split/99.finalreboot.tftpl", {})
   }
 }
 

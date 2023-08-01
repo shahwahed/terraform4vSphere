@@ -33,7 +33,7 @@ resource vsphere_virtual_machine "acme_pki_01" {
   }
 
   extra_config = {
-    "guestinfo.metadata"          = base64encode(templatefile("${path.module}/../srvTemplate/metadata/metadata1nicDyn.tftpl",
+    "guestinfo.metadata"          = base64encode(templatefile("${path.module}/../../srvTemplate/metadata/metadata1nicDyn.tftpl",
                                     {
                                       hostname="${var.acme_srv_config["hostname"]}",
                                       ipA="${var.acme_srv_config["ip"]}",
@@ -52,7 +52,7 @@ data template_cloudinit_config "acme_pki_01" {
   base64_encode = true
 
   part {
-    content     = templatefile("${path.module}/../srvTemplate/userdata.split/10.systembase.tftpl",
+    content     = templatefile("${path.module}/../../srvTemplate/userdata.split/10.systembase.tftpl",
     {
       servicednsname="${var.acme_srv_config["servicednsname"]}",
     })
@@ -60,7 +60,7 @@ data template_cloudinit_config "acme_pki_01" {
   }
   part {
     content_type = "text/x-shellscript"
-    content  = templatefile("${path.module}/../srvTemplate/userdata.split/20.firewall.tftpl",
+    content  = templatefile("${path.module}/../../srvTemplate/userdata.split/20.firewall.tftpl",
     {
       firewall_ports_in="22/tcp,443/tcp"
       firewall_ports_out="22/tcp,53/udp,53/tcp,80/tcp,443/tcp"
@@ -68,7 +68,7 @@ data template_cloudinit_config "acme_pki_01" {
   }
   part {
     content_type = "text/x-shellscript"
-    content  = templatefile("${path.module}/../srvTemplate/userdata.split/30.stepca.tftpl",
+    content  = templatefile("${path.module}/../../srvTemplate/userdata.split/30.stepca.tftpl",
     {
       servicednsname="${var.acme_srv_config["servicednsname"]}",
       sysuser="${var.acme_srv_config["sysuser"]}",
@@ -81,7 +81,7 @@ data template_cloudinit_config "acme_pki_01" {
   }
   part {
     content_type = "text/x-shellscript"
-    content  = templatefile("${path.module}/../srvTemplate/userdata.split/99.finalreboot.tftpl", {})
+    content  = templatefile("${path.module}/../../srvTemplate/userdata.split/99.finalreboot.tftpl", {})
   }
 }
 
