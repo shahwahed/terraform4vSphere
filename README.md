@@ -9,7 +9,9 @@ Readme En Français
 
 # Cloud init template for terraform and other stuff
 
-This repository is a collection of my cloud init template I am using with terraform.
+This repository is a collection of my cloud init template I using with terraform and vSphere provider.
+
+You may use the cloud-init with any system which allow you to use cloud-init.
 
 Cloud init can be either in yaml or script. more information https://cloudinit.readthedocs.io/en/latest/
 
@@ -62,7 +64,7 @@ The cloud-init files are located in the srvTemplate folder
 
 In the folder srvTemplate, you will found two folder, metadata and userdata.split.
 
-The userdata.split contains different cloud-init script, each one get a purpose, from settings a system configuration, firewalling or a services configuration.
+The userdata.split contains different cloud-init script, each one get a purpose, from settings a system configuration, firewall or a services configuration.
 
 Each file begin with a number, from 00 to 99.
 00 for step should be done first
@@ -74,7 +76,7 @@ Each file begin with a number, from 00 to 99.
 
 | File        | Description           |
 | ------------- | ------------- |
-| 00.disableAutoUpdate_cloud-init.tftpl  | disable autoupdate, to speed up VM creation |
+| 00.disableAutoUpdate_cloud-init.tftpl  | disable auto update, to speed up VM creation |
 | 11.systembase.IPFORCED.tftpl  | setup properly ip address in host file |
 |10.systembase.tftpl    |   setup host file with dyn ip |
 |20.firewall.tftpl  | basic firewall using ufw |
@@ -82,17 +84,17 @@ Each file begin with a number, from 00 to 99.
 |21.NAT.tftpl | nat configuration with dhcp dnsmasq|
 |22.NATnodhcp.tftpl | nat configuration without dhcp|
 |30.minio.core.tftpl | minio S3 storage server |
-|30.powerdns.core.nopubwebsrv.tftpl | powerdns server without webserver|
+|30.powerdns.core.nopubwebsrv.tftpl | powerdns server without web server|
 |30.powerdns.core.tftpl| powerdns server |
 |30.vaultConsul.core.tftpl| vault with consul backend|
 |30.netbox.core.tftpl | netbox dcim |
-|30.stepca.core.tftpl | stepca cool ACME server from smalstep|
-|30.stepca.core.listenallint.tftpl | stepca cool ACME server from smalstep, listen on all interface|
+|30.stepca.core.tftpl | stepca cool ACME server from smallstep|
+|30.stepca.core.listenallint.tftpl | stepca cool ACME server from smallstep, listen on all interface|
 |30.harbor.core.tftpl | harbor container registry dockerhub like |
 |30.keycloak.core.tftpl| keycloak server |
 |30.SSHCERTONLY.tftpl| setup ssh to use cert generate with STEPCA CA!!!
 |50.SSL_NGNIX_With_ACME.tftpl | setup ngnix frontend with internal acme certificate
-|51.SSL_NGNIX_With_ACME_With_BOOTSTRAP.tftpl| stepup ngnix frontend with autosigne certiicate|
+|51.SSL_NGNIX_With_ACME_With_BOOTSTRAP.tftpl| stepup ngnix frontend with self sign certificate|
 |99.finalreboot.tftpl | final reboot with clearing of cloud init file for security purpose|
 
 ## Optimizations & Todo
@@ -102,7 +104,44 @@ add some hardening script
 
 
 
-## Usage/Examples
+## Usage/Examples :
+
+Consume like a standard terraform module, you will need to provide only the vsphere provider minimal information needed.
+You can use local variable like a map to define each variable need by the module with a map for example.
+
+```terraform
+module "ntp" {
+  source = "../modules/services/ntp" # path to the module
+  count = "1" # optional you can use count to have multiple instance
+
+    # module internal services vars
+    # in each module you can found variable need by module in variable.tf of the the module
+    #
+    ntp_srv_config = {
+        vfolder        = "/"
+        vmname         = "ntp01"
+        hostname       = "ntp01.mydomain.lan"
+        servicednsname = "ntp01.mydomain.lan"
+        ip             = "192.168.1.208/24"
+        gw             = "192.168.1.1"
+        dns            = "1.1.1.1"
+        ntpsecserver   = "ntppool1.time.nl"
+        timezone       = "Europe/Paris"
+    }
+
+    #vsphere provider need this vars in module
+    datacenter_name = "dc_name"
+    #cluster_name = "cluster_name"
+    datastore_name = "datastore_name"
+    pool_name = "pool_name"
+    network01 = "networkAdm"
+    template_linux_name = "template_linux_name"
+
+}
+```
+
+
+using my modules
 
 Using terraform for vsphere if you want to create your a dynamic cloud init:
 
