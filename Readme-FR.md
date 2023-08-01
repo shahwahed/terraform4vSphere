@@ -24,7 +24,7 @@ Dans ce dépôt vous pouvez aussi trouver :
 
 Cloud-init support d’être séparé en plusieurs fichiers, l'avantage c'est plus modulaire et bien mieux réutilisable.
 
-A force de faire des fichiers cloud-init pour chaque service (dns, ntp, netbox...), chaque fichier avait des parties identique, parfois avec de légère différence.
+A force de faire des fichiers cloud-init pour chaque service (dns, ntp, netbox...), chaque fichier avait des parties identiques, parfois avec de légère différence.
 Avec le multipart mime, vous pouvez séparer votre code en plusieurs parties et lorsque vous faite une mise à jour, tous vos template le son d'un coup!
 
 
@@ -51,21 +51,21 @@ pour plus d'info sur le multi part avec cloud-init : https://cloudinit.readthedo
 
 Dans le répertoire modules, vous aller voir tous mes modules pour créer différent services.
 
-Tous les modules crée des VM Linux qui seront configurer en utilisant cloud-init. Tous les fichiers cloud-init ont été tester avec une distribution ubuntu (22.04 LTS, 22.10 et 23.04)
+Tous les modules crée des VM Linux qui seront configurées en utilisant cloud-init. Tous les fichiers cloud-init ont été testés avec une distribution ubuntu (22.04 LTS, 22.10 et 23.04)
 
 Les fichiers cloud-init sont situées dans le répertoire srvTemplate.
 
 ## Arborescence et structure des fichiers cloud-init
 
-Dans le répertoire srvTemplate, vous avez deux répertoire metadata et userdata.split.
+Dans le répertoire srvTemplate, vous avez deux répertoires metadata et userdata.split.
 
-Le répertoire userdata.split contient différent script cloud-init, chacun étant soit pour de la configuration système (ex parefeu) ou une installation d'un services (ex dns, ntp ...).
+Le répertoire userdata.split contient différent script cloud-init, chacun étant soit pour de la configuration système (ex pare-feu) ou une installation d'un services (ex dns, ntp ...).
 
 Chaque fichier template commence par des chiffres de 00 a 99 pour mieux s’y retrouver.
 
 00 etapes d'initialisation
 1X système de configuration de base
-2X réseau et parefeu
+2X réseau et pare-feu
 3X services
 5X ngnix frontend
 99 etape final pour reboot
@@ -75,8 +75,8 @@ Chaque fichier template commence par des chiffres de 00 a 99 pour mieux s’y re
 | 00.disableAutoUpdate_cloud-init.tftpl  | désactivation de l'autoupdate, pour accélérer les déploiements |
 | 11.systembase.IPFORCED.tftpl  | config du hostname avec une ip static fixe |
 |10.systembase.tftpl    |   config du hostname  |
-|20.firewall.tftpl  | configuration simple du parefeu ufw |
-|20.firewallADV.tftpl| configuration avancé du parefeu ufw |
+|20.firewall.tftpl  | configuration simple du pare-feu ufw |
+|20.firewallADV.tftpl| configuration avancé du pare-feu ufw |
 |21.NAT.tftpl | mise en place d'un nat avec dhcp|
 |22.NATnodhcp.tftpl | mise en place d'un nat sans dhcp|
 |30.minio.core.tftpl | serveur de stockage minio S3 |
@@ -101,13 +101,13 @@ ajout de script de durcissements système
 
 ## Usage/Exemples
 
-Utiliser comme un module standard terraform, vous n'avez qu'a donner le minimum d'information au provider vSphere utilisé par le module
+Utiliser comme un module standard terraform, vous n'avez qu'a donné le minimum d'information au provider vSphere utilisé par le module
 Vous pouvez utiliser des variables locale comme un "map" ou définir chaque variable unitairement.
 
 ```terraform
 module "ntp" {
   source = "../modules/services/ntp" # chemin vers les modules
-  count = "1" # optionnel vous pouvez utiliser la variable count pour faire plusieurs instance
+  count = "1" # optionnel vous pouvez utiliser la variable count pour faire plusieurs instances
 
     # variable requis par les modules
     # dans chaque module une liste des variables nécessaire est disponible dans le fichier variable.tf du module
