@@ -56,7 +56,7 @@ more info about mime support in cloud-init : https://cloudinit.readthedocs.io/en
 
 In the modules folder, you will found all my terraform modules to create various services. 
 
-all modules create a linux VM and then customize it using cloud-init, all cloud-init file, have been tested with ubuntu distribution (22.04 LTS and 22.10)
+all modules create a linux VM and then customize/configure it using cloud-init, all cloud-init file, have been tested with ubuntu distribution (22.04 LTS, 22.10 and 23.04)
 
 The cloud-init files are located in the srvTemplate folder
 
@@ -64,7 +64,7 @@ The cloud-init files are located in the srvTemplate folder
 
 In the folder srvTemplate, you will found two folder, metadata and userdata.split.
 
-The userdata.split contains different cloud-init script, each one get a purpose, from settings a system configuration, firewall or a services configuration.
+The userdata.split contains different cloud-init script, each one get a purpose, from settings a system configuration (ex firewall settings) or a service installation (ex dns, ntp ...).
 
 Each file begin with a number, from 00 to 99.
 00 for step should be done first
@@ -107,7 +107,7 @@ add some hardening script
 ## Usage/Examples :
 
 Consume like a standard terraform module, you will need to provide only the vsphere provider minimal information needed.
-You can use local variable like a map to define each variable need by the module with a map for example.
+You can use local variable like a map to define each variable need by the module or one by one.
 
 ```terraform
 module "ntp" {
@@ -139,9 +139,6 @@ module "ntp" {
 
 }
 ```
-
-
-using my modules
 
 Using terraform for vsphere if you want to create your a dynamic cloud init:
 
@@ -239,5 +236,5 @@ resource vsphere_virtual_machine "natgateway" {
 
 [![MIT License](https://img.shields.io/badge/License-MIT-green.svg)](https://choosealicense.com/licenses/mit/)
 [![Terraform vSphere Provider](https://img.shields.io/badge/terraform-vsphere__provider-green)](https://registry.terraform.io/providers/hashicorp/vsphere/latest)
-[![vsphere version](https://img.shields.io/badge/vsphere-6.X%2C%207.X-green)](https://vmware.com)
+[![vsphere version](https://img.shields.io/badge/vsphere-6.X%2C%207.X%28.X-green)](https://vmware.com)
 
