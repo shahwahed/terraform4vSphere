@@ -1,0 +1,135 @@
+#!/bin/sh
+
+
+SERVICEDNSNAME="${servicednsname}"
+DC="${vaultdc}"
+
+
+#add hashicorp key and repository
+curl -fsSL https://apt.releases.hashicorp.com/gpg | sudo apt-key add -
+cputype="$(dpkg --print-architecture)"
+apt-add-repository -y "deb [arch=$${cputype}] https://apt.releases.hashicorp.com $(lsb_release -cs) main"
+
+# -qq -o=Dpkg::Use-Pty=0 # option to make apt less verbose -qq for apt and -o=dpkg for apt forking to dpkg to install package
+DEBIAN_FRONTEND=noninteractive
+echo "update source list"
+
+apt-get -qq -o=Dpkg::Use-Pty=0 install -y vault consul
+
+echo "nginx"
+apt-get -qq -o=Dpkg::Use-Pty=0 install -y nginx
+
+#configure vault and consul 
+#consul
+#consul config file
+
+cat > /etc/consul.d/consul.hcl <<-EOF
+datacenter = "$${DC}"
+data_dir = "/var/lib/consul"
+client_addr = "127.0.0.1"
+ui_config {
+        enabled = true
+}
+server = true
+advertise_addr = "127.0.0.1"
+bootstrap_expect = 1
+EOF
+
+touch /etc/consul.d/consul.env 
+
+#creating consul datafile
+mkdir -p /var/lib/consul
+chown -R consul:consul /var/lib/consul /etc/consul.d
+chmod 400 /etc/consul.d/consul.env /etc/consul.d/consul.hcl
+chmod 700 /var/lib/consul
+
+
+# systemd backup and timer for consul
+cat > /etc/systemd/system/consul-backup.service <<-EOF
+[Service]
+Type=oneshot
+ExecStart=/etc/consul.d/consul-backup.sh
+EOF
+
+cat > /etc/systemd/system/consul-backup.timer <<-EOF
+[Unit]
+Description=Backup Consul
+
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=60min
+
+[Install]
+WantedBy=timers.target
+EOF
+
+cat > /etc/consul.d/consul-backup.sh <<-EOF
+#!/bin/bash
+/usr/bin/consul snapshot save /root/backup-consul-$(date +%Y-%m-%d_%H-%M-%S).snap
+EOF
+chmod +x /etc/consul.d/consul-backup.sh
+chown consul.consul /etc/consul.d/consul-backup.sh
+
+systemctl daemon-reload
+systemctl enable consul-backup.timer
+systemctl list-timers
+
+
+#vault
+#vault config file
+cat > /etc/vault.d/vault.hcl <<-EOF
+ui = true
+
+storage "consul" {
+        address = "127.0.0.1:8500"
+        path = "vault"
+}
+# HTTP listener because nginx is frontend
+listener "tcp" {
+        address = "127.0.0.1:8200"
+        tls_disable = 1
+}
+api_addr = "https://127.0.0.1:8200"
+EOF
+
+chmod 700 /etc/vault.d
+chown -R vault:vault /etc/vault.d
+chmod 600 /etc/vault.d/vault.hcl
+touch /etc/vault.d/vault.env
+chmod 600 /etc/vault.d/vault.env
+
+#configure ngnix to be frontend
+
+#following should be with TLS if we have an ACME we could use it
+#setup nginx
+echo "setup nginx"
+unlink /etc/nginx/sites-enabled/default
+
+cat > /etc/nginx/sites-available/$${SERVICEDNSNAME%%.*}-reverse-proxy.conf << EOF
+server {
+        listen 80;
+        #uncomment if you have DNS
+        server_name $${SERVICEDNSNAME};
+
+        access_log /var/log/nginx/reverse-access.log;
+        error_log /var/log/nginx/reverse-error.log;
+
+               location / {
+                proxy_pass http://127.0.0.1:8200;
+                proxy_set_header Host \$host;
+                proxy_set_header X-Real-IP \$remote_addr;
+                proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+                proxy_set_header X-Forwarded-Proto https;
+        }
+
+}
+EOF
+
+ln -s /etc/nginx/sites-available/$${SERVICEDNSNAME%%.*}-reverse-proxy.conf /etc/nginx/sites-enabled/$${SERVICEDNSNAME%%.*}-reverse-proxy.conf
+
+
+#enable at boot
+systemctl enable nginx.service
+systemctl enable consul.service
+systemctl enable vault.service

@@ -1,0 +1,33 @@
+#!/bin/sh
+
+SERVICEDNSNAME="${servicednsname}"
+IPADDR="${mainip}"
+
+# get ip addresse from the one who can go out
+#IPADDR=$(ip route get 8.8.8.8 | awk -F"src " 'NR==1{split($2,a," ");print a[1]}')
+
+#setup hostname and hosts file
+hostname $${SERVICEDNSNAME%%.*}
+
+sed -i '/^127.0.1.1 u/d' /etc/hosts
+if grep $IPADDR /etc/hosts ;
+then
+sed -i "/$${IPADDR}/ c\ $${IPADDR} $${SERVICEDNSNAME} $${SERVICEDNSNAME%%.*} /" /etc/hosts
+else
+echo $${IPADDR} $${SERVICEDNSNAME} $${SERVICEDNSNAME%%.*} >> /etc/hosts
+fi
+
+
+# -qq -o=Dpkg::Use-Pty=0 # option to make apt less verbose -qq for apt and -o=dpkg for apt forking to dpkg to install package
+DEBIAN_FRONTEND=noninteractive
+#wait for apt finish
+while fuser /var/lib/dpkg/lock >/dev/null 2>&1 ; do
+    echo "wait for another apt"
+    sleep 0.5
+done 
+echo "update source list"
+apt-get -qq -o=Dpkg::Use-Pty=0 update
+
+echo "set vim default editor"
+update-alternatives --set editor /usr/bin/vim.basic
+

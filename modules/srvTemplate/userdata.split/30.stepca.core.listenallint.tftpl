@@ -1,0 +1,237 @@
+#!/bin/bash
+# V1.0
+# step-ca acme/ssh server setup
+# the following is variable need by the script, don't change them unless you modify the script
+# variable is modify by terraform template system
+
+PASSWORD="${password}"
+PROVISIONERPASS="${provisionerpassword}"
+PROVISIONERNAME="${provisionername}"
+SYSUSER="${sysuser}"
+SYSGROUP="${sysgroup}"
+SERVICEDNSNAME="${servicednsname}"
+PKINAME="${pkiname}"
+
+#local varable
+DOMAIN="$${SERVICEDNSNAME#*.}"
+HOSTNAME="$${SERVICEDNSNAME%%.*}"
+
+
+#local variable
+# get ip addresse from the one who can go out
+IPADDR=$(ip route get 8.8.8.8 | awk -F"src " 'NR==1{split($2,a," ");print a[1]}')
+
+
+# -qq -o=Dpkg::Use-Pty=0 # option to make apt less verbose -qq for apt and -o=dpkg for apt forking to dpkg to install package
+DEBIAN_FRONTEND=noninteractive
+
+#create stepca user
+groupadd -g 4000 --system $SYSUSER
+useradd \
+   -g 4000 \
+   -u 4000 \
+   --system \
+   --shell /bin/false \
+   -m --home /etc/step-ca \
+   $SYSGROUP
+
+mkdir -p /etc/step-ca
+chown -R $${SYSUSER}:$${SYSGROUP} /etc/step-ca
+
+
+#stepca download
+echo "download and install step-ca"
+mkdir -p /tmp/buildpki
+cd /tmp/buildpki
+
+#retrive installer from github repo based on your cpu
+# deb for debian like distrib
+# tar file, but only usefull for arm install
+cputype="$(dpkg --print-architecture)"
+if [ $cputype = "amd64" ]
+then
+        curl -s https://api.github.com/repos/smallstep/cli/releases/latest | grep browser_download_url |cut -d'"' -f4 | grep -i "$(dpkg --print-architecture).deb" | wget -nv -i -
+        #wait for apt finish
+        while fuser /var/lib/dpkg/lock >/dev/null 2>&1 ; do
+            echo "wait for another apt"
+            sleep 0.5
+        done 
+        dpkg -i step-cli_*_amd64.deb
+        curl -s https://api.github.com/repos/smallstep/certificates/releases/latest | grep browser_download_url |cut -d'"' -f4 | grep -i "$(dpkg --print-architecture).deb" | wget -nv -i -
+        while fuser /var/lib/dpkg/lock >/dev/null 2>&1 ; do
+            echo "wait for another apt"
+            sleep 0.5
+        done 
+        dpkg -i step-ca_*_amd64.deb
+fi
+
+#this part is for ARM64 support only
+cputype="`dpkg --print-architecture`"
+if [ $cputype = "arm64" ]
+then
+    #download step client for arm64
+    curl -s https://api.github.com/repos/smallstep/cli/releases/latest | grep browser_download_url |cut -d'"' -f4 | grep -i "$(dpkg --print-architecture)" | grep -i "$(uname -s)" | wget -nv -i -
+
+    # check using cosign downloaded package
+    curl -s https://api.github.com/repos/sigstore/cosign/releases/latest | grep browser_download_url |cut -d'"' -f4 | grep -i "cosign-$(uname -s)-$(dpkg --print-architecture)$"
+
+    chmod +x cosign-linux-$(dpkg --print-architecture)
+    ./cosign-linux-amd64 verify-blob \
+    --key https://raw.githubusercontent.com/smallstep/cli/master/cosign.pub \
+    --signature step_linux_*.tar.gz.sig \
+    step_linux_*.tar.gz
+
+    if [ $? -eq 1 ] 
+    then
+      echo "step client installer signature check error"
+      exit 1
+    fi
+
+    tar xvzf step_linux_*_arm64.tar.gz
+    cp step_*/bin/step /usr/bin
+    step version
+
+    #download step ca server
+    curl -s https://api.github.com/repos/smallstep/certificates/releases/latest | grep browser_download_url |cut -d'"' -f4 | grep -i "$(dpkg --print-architecture)" | grep -i "$(uname -s)"| wget -nv -i -
+
+    # check using cosign downloaded package
+    ./cosign-linux-amd64 verify-blob \
+    --key https://raw.githubusercontent.com/smallstep/cli/master/cosign.pub \
+    --signature step-ca_linux_*.tar.gz.sig \
+    step-ca_linux_*.tar.gz
+
+    if [ $? -eq 1 ] 
+    then
+      echo "step-ca server installer signature check error"
+      exit 1
+    fi
+
+    tar xvzf step-ca_linux*.tar.gz
+    cp step-ca_*/bin/step-ca /usr/bin
+    #add cap for listen on 443
+    setcap CAP_NET_BIND_SERVICE=+eip /usr/bin/step-ca
+    step-ca version
+fi
+
+echo "$${PASSWORD}" > /etc/step-ca/password.txt
+echo "$${PROVISIONERPASS}" > /etc/step-ca/provisioner.password.txt
+chmod 640 /etc/step-ca/password.txt
+chmod 640 /etc/step-ca/provisioner.password.txt
+chown -R $${SYSUSER}:$${SYSGROUP} /etc/step-ca
+
+
+ALLEXTIPADDR="`ip -o -4 a | grep ens| tr -s " " | cut -d" " -f4|cut -d"/" -f1 | tr '\n' ','`"
+
+su $${SYSUSER} -s /bin/bash <<EOF
+step ca init --name="$${PKINAME}" \
+             --dns=$${SERVICEDNSNAME},$${ALLEXTIPADDR::-1} \
+             --address=0.0.0.0:443 \
+             --password-file /etc/step-ca/password.txt \
+             --provisioner-password-file /etc/step-ca/provisioner.password.txt \
+             --provisioner=$${PROVISIONERNAME} \
+             --ssh
+
+ln -s /etc/step-ca/.step/config /etc/step-ca/config
+ln -s /etc/step-ca/.step/templates /etc/step-ca/templates
+ln -s /etc/step-ca/.step/db /etc/step-ca/db
+EOF
+
+mkdir -p /etc/step-ca/.step/db
+chown -R $${SYSUSER}:$${SYSGROUP} /etc/step-ca
+
+echo "create systemd unit file"
+
+cat > "/etc/systemd/system/step-ca.service" << EOF
+[Unit]
+Description=step-ca service
+Documentation=https://smallstep.com/docs/step-ca
+Documentation=https://smallstep.com/docs/step-ca/certificate-authority-server-production
+After=network-online.target
+Wants=network-online.target
+StartLimitIntervalSec=30
+StartLimitBurst=3
+ConditionFileNotEmpty=/etc/step-ca/config/ca.json
+ConditionFileNotEmpty=/etc/step-ca/password.txt
+
+[Service]
+Type=simple
+User=${sysuser}
+Group=${sysgroup}
+Environment=STEPPATH=/etc/step-ca
+WorkingDirectory=/etc/step-ca
+ExecStart=/usr/bin/step-ca /etc/step-ca/config/ca.json --password-file /etc/step-ca/password.txt
+ExecReload=/bin/kill --signal HUP $MAINPID
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=30
+StartLimitInterval=30
+StartLimitBurst=3
+
+; Process capabilities & privileges
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+CapabilityBoundingSet=CAP_NET_BIND_SERVICE
+SecureBits=keep-caps
+NoNewPrivileges=yes
+
+; Sandboxing
+ProtectSystem=full
+ProtectHome=true
+RestrictNamespaces=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+PrivateTmp=true
+PrivateDevices=true
+ProtectClock=true
+ProtectControlGroups=true
+ProtectKernelTunables=true
+ProtectKernelLogs=true
+ProtectKernelModules=true
+LockPersonality=true
+RestrictSUIDSGID=true
+RemoveIPC=true
+RestrictRealtime=true
+SystemCallFilter=@system-service
+SystemCallArchitectures=native
+MemoryDenyWriteExecute=true
+ReadWriteDirectories=/etc/step-ca/db
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+systemctl daemon-reload
+
+echo "start step-ca"
+systemctl start step-ca
+
+su $${SYSUSER} -s /bin/bash <<EOF
+step ca provisioner add acme --type acme --ca-config /etc/step-ca/config/ca.json
+EOF
+
+systemctl restart step-ca
+
+sleep 10
+#grab root ca from our internal pki then update root trust store
+#bootstrap root account with step ca and install root certificate to trust store
+ROOTCAFINGERPRINT=`step certificate fingerprint /etc/step-ca/.step/certs/root_ca.crt`
+step ca bootstrap --ca-url https://$IPADDR --fingerprint $ROOTCAFINGERPRINT --install
+
+#set up ssh host cert
+
+TOKEN=`echo "$${PROVISIONERPASS}"  | step ca token $${SERVICEDNSNAME} --ssh --host --provisioner $${PROVISIONERNAME} --password-file /dev/stdin`
+step ssh certificate $${SERVICEDNSNAME} /etc/ssh/ssh_host_ecdsa_key.pub --host --sign --provisioner $${PROVISIONERNAME} --token $TOKEN
+
+# Configure `sshd`
+tee -a /etc/ssh/sshd_config > /dev/null <<EOF
+# SSH CA Configuration
+# The path to the CA public key for authenticatin user certificates
+TrustedUserCAKeys /etc/step-ca/.step/certs/ssh_user_ca_key.pub
+# Path to the private key and certificate
+HostKey /etc/ssh/ssh_host_ecdsa_key
+HostCertificate /etc/ssh/ssh_host_ecdsa_key-cert.pub
+EOF
+service ssh restart
+
+#enable at boot
+systemctl enable ufw.service
+systemctl enable step-ca
+echo "### STEPCA READY ###"

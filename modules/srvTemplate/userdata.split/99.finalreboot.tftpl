@@ -1,0 +1,10 @@
+#!/bin/sh
+
+
+#disable cloud-init after cleanup
+#if you don't sshkey is regen
+# without cloud-init clean script/part-000 is still containing secret
+cloud-init clean
+touch /etc/cloud/cloud-init.disabled
+#clean reboot
+reboot

@@ -1,0 +1,23 @@
+local-hostname: ${hostname}
+instance-id: ${hostname}
+network:
+  version: 2
+  ethernets:
+    ens192:
+      %{~ if dhcp == "true" ~}
+      dhcp4: true #true to use dhcp
+      %{~ endif ~}
+      %{~ if dhcp == "false" ~}
+      dhcp4: false
+      addresses:
+        %{ if ipaddress != "true" }
+        - ${ipaddress} #Set you ip here
+        %{~ endif ~}
+      gateway4: {gateway} # Set gw here 
+      nameservers:
+        addresses:
+          - {dns} # Set DNS ip address here
+      %{~ endif ~}
+cleanup-guestinfo:
+- userdata
+- vendordata

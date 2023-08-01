@@ -1,0 +1,66 @@
+#!/bin/sh
+
+SERVICEDNSNAME="${servicednsname}"
+
+ACMEPKI="${acmepki}"
+ROOTCAFINGERPRINT="${rootcafingerprint}"
+
+# -qq -o=Dpkg::Use-Pty=0 # option to make apt less verbose -qq for apt and -o=dpkg for apt forking to dpkg to install package
+DEBIAN_FRONTEND=noninteractive
+echo "certbot"
+apt-get -qq -o=Dpkg::Use-Pty=0 install -y certbot python3-certbot-nginx
+
+#set certbot + ac certificate
+cd /tmp
+cputype="$(dpkg --print-architecture)"
+if [ $cputype = "amd64" ]
+then
+        curl -s https://api.github.com/repos/smallstep/cli/releases/latest | grep browser_download_url |cut -d'"' -f4 | grep -i "$(dpkg --print-architecture).deb" | wget -nv -i -
+        dpkg -i step-cli_*_amd64.deb
+fi
+
+#this part is for ARM64 support only
+cputype="`dpkg --print-architecture`"
+if [ $cputype = "arm64" ]
+then
+    #download step client for arm64
+    curl -s https://api.github.com/repos/smallstep/cli/releases/latest | grep browser_download_url |cut -d'"' -f4 | grep -i "$(dpkg --print-architecture)" | grep -i "$(uname -s)" | wget -nv -i -
+
+    # check using cosign downloaded package
+    curl -s https://api.github.com/repos/sigstore/cosign/releases/latest | grep browser_download_url |cut -d'"' -f4 | grep -i "cosign-$(uname -s)-$(dpkg --print-architecture)$"
+
+    chmod +x cosign-linux-$(dpkg --print-architecture)
+    ./cosign-linux-amd64 verify-blob \
+    --key https://raw.githubusercontent.com/smallstep/cli/master/cosign.pub \
+    --signature step_linux_*.tar.gz.sig \
+    step_linux_*.tar.gz
+
+    if [ $? -eq 1 ] 
+    then
+      echo "step client installer signature check error"
+      exit 1
+    fi
+
+    tar xvzf step_linux_*_arm64.tar.gz
+    cp step_*/bin/step /usr/bin
+    step version
+fi
+
+#grab root ca from our internal pki then update root trust store
+
+step ca bootstrap --ca-url https://$${ACMEPKI} --fingerprint $${ROOTCAFINGERPRINT} --install
+
+echo "generate nginx certificate from internal ACME"
+SITE_ENABLE="$(grep server_name /etc/nginx/sites-enabled/* -RiI | uniq| tr -s ' ' | cut -d" " -f3 | cut -d';' -f1 | tr '\n' ' ')"
+for SITE in $${SITE_ENABLE}
+do
+certbot -n --nginx \
+           --agree-tos \
+           -d $${SITE} \
+           --server https://$${ACMEPKI}/acme/acme/directory \
+           --email nomail@$${SERVICEDNSNAME#*.} \
+           --rsa-key-size 4096 \
+           --redirect
+done
+
+systemctl daemon-reload

@@ -1,0 +1,29 @@
+#!/bin/sh
+
+SERVICEDNSNAME="${servicednsname}"
+ACMEPKI="${acmepki}"
+
+
+# -qq -o=Dpkg::Use-Pty=0 # option to make apt less verbose -qq for apt and -o=dpkg for apt forking to dpkg to install package
+DEBIAN_FRONTEND=noninteractive
+
+apt-get -qq -o=Dpkg::Use-Pty=0 install -y certbot python3-certbot-nginx
+
+
+#
+echo "generate nginx certificate from internal ACME"
+
+SITE_ENABLE="$(grep server_name /etc/nginx/sites-enabled/* -RiI | uniq| tr -s ' ' | cut -d" " -f3 | cut -d';' -f1 | tr '\n' ' ')"
+for SITE in $${SITE_ENABLE}
+do
+certbot -n --nginx \
+           --agree-tos \
+           -d $${SITE} \
+           --server https://$${ACMEPKI}/acme/acme/directory \
+           --email nomail@$${SERVICEDNSNAME#*.} \
+           --rsa-key-size 4096 \
+           --redirect
+done
+
+
+systemctl daemon-reload

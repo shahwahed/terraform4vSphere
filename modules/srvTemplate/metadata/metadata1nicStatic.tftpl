@@ -1,0 +1,15 @@
+local-hostname: ${hostname}
+instance-id: ${hostname}
+network:
+  version: 2
+  ethernets:
+    ens192:
+      dhcp4: false
+      addresses:
+        - ${ipA} #Set you ip here
+      gateway4: ${gw} # Set gw here 
+      nameservers:
+        addresses: [%{ for addr in dns ~}${addr},%{ endfor }]
+cleanup-guestinfo:
+- userdata
+- vendordata

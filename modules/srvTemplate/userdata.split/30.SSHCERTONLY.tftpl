@@ -1,0 +1,69 @@
+#!/bin/sh
+
+SERVICEDNSNAME="${servicednsname}"
+ACMEPKI="${acmepki}"
+ROOTCAFINGERPRINT="${rootcafingerprint}"
+CA_SSHCLIENT_PUBKEY="${ca_ssh_client_pubkey}"
+PROVISIONERPASS="${provisionerpassword}"
+PROVISIONERNAME="${provisionername}"
+
+
+# -qq -o=Dpkg::Use-Pty=0 # option to make apt less verbose -qq for apt and -o=dpkg for apt forking to dpkg to install package
+DEBIAN_FRONTEND=noninteractive
+
+#ac certificate + ssh certhost
+cd /tmp
+cputype="$(dpkg --print-architecture)"
+if [ $cputype = "amd64" ]
+then
+        curl -s https://api.github.com/repos/smallstep/cli/releases/latest | grep browser_download_url |cut -d'"' -f4 | grep -i "$(dpkg --print-architecture).deb" | wget -nv -i -
+        dpkg -i step-cli_*_amd64.deb
+fi
+
+#this part is for ARM64 support only
+cputype="`dpkg --print-architecture`"
+if [ $cputype = "arm64" ]
+then
+    #download step client for arm64
+    curl -s https://api.github.com/repos/smallstep/cli/releases/latest | grep browser_download_url |cut -d'"' -f4 | grep -i "$(dpkg --print-architecture)" | grep -i "$(uname -s)" | wget -nv -i -
+
+    # check using cosign downloaded package
+    curl -s https://api.github.com/repos/sigstore/cosign/releases/latest | grep browser_download_url |cut -d'"' -f4 | grep -i "cosign-$(uname -s)-$(dpkg --print-architecture)$"
+
+    chmod +x cosign-linux-$(dpkg --print-architecture)
+    ./cosign-linux-amd64 verify-blob \
+    --key https://raw.githubusercontent.com/smallstep/cli/master/cosign.pub \
+    --signature step_linux_*.tar.gz.sig \
+    step_linux_*.tar.gz
+
+    if [ $? -eq 1 ] 
+    then
+      echo "step client installer signature check error"
+      exit 1
+    fi
+
+    tar xvzf step_linux_*_arm64.tar.gz
+    cp step_*/bin/step /usr/bin
+    step version
+fi
+
+#grab root ca from our internal pki then update root trust store
+#bootstrap root account with step ca and install root certificate to trust store
+step ca bootstrap --ca-url https://$${ACMEPKI} --fingerprint $${ROOTCAFINGERPRINT} --install
+
+#set up ssh host cert
+echo "ecdsa-sha2-nistp256 $${CA_SSHCLIENT_PUBKEY}"  > $(step path)/certs/ssh_user_key.pub
+
+TOKEN=`echo "$${PROVISIONERPASS}"  | step ca token $${SERVICEDNSNAME} --ssh --host --provisioner $${PROVISIONERNAME} --password-file /dev/stdin`
+step ssh certificate $${SERVICEDNSNAME} /etc/ssh/ssh_host_ecdsa_key.pub --host --sign --provisioner $${PROVISIONERNAME} --token $TOKEN
+
+# Configure `sshd`
+tee -a /etc/ssh/sshd_config > /dev/null <<EOF
+# SSH CA Configuration
+# The path to the CA public key for authenticatin user certificates
+TrustedUserCAKeys /root/.step/certs/ssh_user_key.pub
+# Path to the private key and certificate
+HostKey /etc/ssh/ssh_host_ecdsa_key
+HostCertificate /etc/ssh/ssh_host_ecdsa_key-cert.pub
+EOF
+service ssh restart
