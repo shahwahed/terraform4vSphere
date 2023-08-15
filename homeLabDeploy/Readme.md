@@ -26,7 +26,7 @@ I love scripting and automation. In this repository you will find all my scripts
 hardware :
 1 x thincentre m700 64G RAM 1To SSD with additional USB nic
 3 x thinkcentre m910q 64G RAM 256G nvme 1To SSD with additional USB nic
-some managable switch
+some manageable switch
 
 the final setup should look like to :
 
