@@ -45,6 +45,7 @@ resource "local_file" "cm_ca_cert" {
 
 # Create private key for server certificate 
 resource "tls_private_key" "cm_internal" {
+  sensitive = true
   #algorithm = "ED25519"
   algorithm = "RSA"
   rsa_bits  = 4096 

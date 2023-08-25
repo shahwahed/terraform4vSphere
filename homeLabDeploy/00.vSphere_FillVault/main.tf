@@ -12,6 +12,7 @@ provider "vault" {
 resource "vault_mount" "homelabKV" {
   path = "homelab"
   type = "kv-v2"
+  description = "Home Lab KV Store"
 } 
 
 # Create Policies to use vault 

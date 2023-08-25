@@ -21,6 +21,12 @@ All this steps can take lot of time. Using terraform, packer and some custom scr
 
 I love scripting and automation. In this repository you will find all my scripts.
 
+# Disclaimer
+
+All this stuff have not been tested as it is in an production environment, it could be use as a base to make a IaC style production if you add more control, a better design (more vlans, firewall, isolation...)
+
+All password you may found in this repository have to be change and are here only for education purpose.
+
 # my home lab
 
 hardware :
@@ -46,7 +52,36 @@ the final setup should look like to :
 
 # repository organization
 
+```sh
+homeLabDeploy/                           
+├── 00.vSphere_FillVault           # feel your vault with homelab kv secrets
+│   ├── main.tf
+│   ├── policies
+│   │   ├── admin-policy.hcl
+│   │   └── iac-client-policy.hcl
+│   ├── Readme.md
+│   └── secrets.tf
+├── 01.vSphere_Tmp                 # Stage to setup the TMP VCSA
+│   ├── main.tf
+│   ├── terraform.tfvars
+│   └── variables.tf
+├── 02.vSphere_Tmp_Customize       # Stage to create the packer template (ubuntu)
+│   ├── main.tf
+│   ├── terraform.tfvars
+│   └── variables.tf
+├── 03.vSphere_Tmp_Vms             # Stage to create the VM needs to setup properly a VCSA (DNS and NTP)
+│   ├── dnsentries.tftpl
+│   ├── main.tf
+│   ├── terraform.tfvars
+│   └── variables.tf
+├── 04.vSphere_Final               # Stage to create the final VCSA
+│   ├── main.tf
+│   ├── terraform.tfstate
+│   ├── terraform.tfvars
+│   └── variables.tf
+└── Readme.md
 
+```
 
 # let initialize some variable
 
@@ -54,15 +89,16 @@ You will need secrets for your home labs (ESXi, VCSA, root password, api key etc
 
 I've got a vault from hashicorp running on my laptop. I use the key/value engine to store both secrets and config information, 
 
-If you don't have one just kick one using docker!
+If you don't have one just kick one using docker! You will found in homeLabDeploy/00.vSphere_FillVault a quick terraform to fill your vault with a kv-v2 store for minimal lab deployment (more info in Readme.md file in this folder)
 
 go to stage_init folder, edit variable.tf to fill all information need for the lab setup
 
-export your vault endpoint and token and run terraform to fill your vault
+export your vault endpoint and token and run terraform to fill your vault, also export VAULT_SKIP_VERIFY=true if you don't have the CA root certificate in your certificate manager.
 
 ```sh
-$ export TF_
-$ export TF_
+$ export VAULT_TOKEN=XXX.XXXXXXXXXXXXXXXX
+$ export VAULT_ADDR=https://127.0.0.1:8200
+$ export VAULT_SKIP_VERIFY=true
 $ terraform init
 $ terraform apply
 ```
@@ -79,8 +115,9 @@ Now our temporary VCSA is up and running, we will customize a bit and use the vS
 I use ubuntu server 22.04 LTS and setup cloud-init
 
 ```sh
-$ export TF_
-$ export TF_
+$ export VAULT_TOKEN=XXX.XXXXXXXXXXXXXXXX
+$ export VAULT_ADDR=https://127.0.0.1:8200
+$ export VAULT_SKIP_VERIFY=true
 $ terraform init
 $ terraform apply
 ```
@@ -96,8 +133,9 @@ I use powerdns as a dns server, even if with a terraform provider you could crea
 I use ntpsec to sync the ntp server to a public ntp server for security reason. you could choose your ntpsec server [here][ntplist]
 
 ```sh
-$ export TF_
-$ export TF_
+$ export VAULT_TOKEN=XXX.XXXXXXXXXXXXXXXX
+$ export VAULT_ADDR=https://127.0.0.1:8200
+$ export VAULT_SKIP_VERIFY=true
 $ terraform init
 $ terraform apply
 ```
@@ -112,8 +150,9 @@ connect to your ESXi and poweroff the temporary VCSA and delete it. Currently we
 know you have to run the final stage in folder vSphere_Final
 
 ```sh
-$ export TF_
-$ export TF_
+$ export VAULT_TOKEN=XXX.XXXXXXXXXXXXXXXX
+$ export VAULT_ADDR=https://127.0.0.1:8200
+$ export VAULT_SKIP_VERIFY=true
 $ terraform init
 $ terraform apply
 ```
@@ -122,9 +161,8 @@ after this run, you will have a vcenter ready with a local fqdn and ntp.
 
 # what to do next
 
-now connect to your freshly installed virtual center and import back the template.
-you can install all other ESXi host.
-
+Now connect to your freshly installed virtual center and import back the template.
+You can install all other ESXi host.
 
 
 

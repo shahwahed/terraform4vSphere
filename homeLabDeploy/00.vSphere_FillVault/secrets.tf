@@ -1,6 +1,6 @@
-
-resource "time_sleep" "wait_30_seconds" {
-  create_duration = "30s"
+# just wait few second to make sure vault is correctly created
+resource "time_sleep" "wait_5_seconds" {
+  create_duration = "5s"
 }
 
 #--Resource Groups
@@ -26,17 +26,17 @@ variable "ssh_multipass01" {
                  "password"]
 }
 
-#set random passwords!!!
+# set random passwords!!!
 #
 
 resource "random_password" "homelabSecrets" {
-    length = 32
-    special = true
-    count   = "3"
+    length = 16
+    special = false
+    count   = "4"
 }
 
 resource "vault_generic_secret" "vsphereSecrets" {
-    depends_on = [time_sleep.wait_30_seconds]
+    depends_on = [time_sleep.wait_5_seconds]
     path      = "homelab/vsphere"
     count     = "${length(var.vsphere_secrets)}"
     data_json = <<EOT
@@ -48,20 +48,8 @@ resource "vault_generic_secret" "vsphereSecrets" {
     EOT
 }
 
-resource "vault_generic_secret" "esxiSecrets" {
-    depends_on = [time_sleep.wait_30_seconds]
-    path      = "homelab/esx01"
-    count     = "${length(var.esxi_secrets)}"
-    data_json = <<EOT
-    {
-    "${var.esxi_secrets[0]}": "root",
-    "${var.esxi_secrets[1]}": "VMware123"
-    }
-    EOT
-}
-
 resource "vault_generic_secret" "linuxSecrets" {
-    depends_on = [time_sleep.wait_30_seconds]
+    depends_on = [time_sleep.wait_5_seconds]
     path      = "homelab/ssh_multipass01"
     count     = "${length(var.ssh_multipass01)}"
     data_json = <<EOT
@@ -72,5 +60,21 @@ resource "vault_generic_secret" "linuxSecrets" {
     EOT
 }
 
+# if you want to get up random password for your ESXi
+# replace "VMware123" by "${random_password.homelabSecrets.3.result}"
+# don't forget to modify your actual ESXi password with this one
+# if you want to use deploy your homelab 
+
+resource "vault_generic_secret" "esxiSecrets" {
+    depends_on = [time_sleep.wait_5_seconds]
+    path      = "homelab/esx01"
+    count     = "${length(var.esxi_secrets)}"
+    data_json = <<EOT
+    {
+    "${var.esxi_secrets[0]}": "root",
+    "${var.esxi_secrets[1]}": "VMware123"
+    }
+    EOT
+}
 
 
