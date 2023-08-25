@@ -238,3 +238,4 @@ resource vsphere_virtual_machine "natgateway" {
 [![Terraform vSphere Provider](https://img.shields.io/badge/terraform-vsphere__provider-green)](https://registry.terraform.io/providers/hashicorp/vsphere/latest)
 [![vsphere version](https://img.shields.io/badge/vsphere-6.X%2C%207.X%2C%208.X-green)](https://vmware.com)
 
+<meta name="google-site-verification" content="giUpWYAmHlPtO3wW8WyVSabmpFg5irmPPvZK2gCWHB0" />
