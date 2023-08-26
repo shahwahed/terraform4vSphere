@@ -41,6 +41,8 @@ more info about mime support in cloud-init : https://cloudinit.readthedocs.io/en
 ```sh
 ├── homeLabDeploy               # home lab deployment script using terraform, packer, and cloud init
 │
+├── CertPKI                     # Quick PKI using terraform, for selfsign certificate base on CA
+│
 ├── modules                     # Modules folder
 │   ├── services                # services definition (dns, ntp, ...) base on a cloud-init installation, terraform modules
 │   ├── srvTemplate             # cloud-init multi part (user-data and meta-data)
@@ -237,5 +239,3 @@ resource vsphere_virtual_machine "natgateway" {
 [![MIT License](https://img.shields.io/badge/License-MIT-green.svg)](https://choosealicense.com/licenses/mit/)
 [![Terraform vSphere Provider](https://img.shields.io/badge/terraform-vsphere__provider-green)](https://registry.terraform.io/providers/hashicorp/vsphere/latest)
 [![vsphere version](https://img.shields.io/badge/vsphere-6.X%2C%207.X%2C%208.X-green)](https://vmware.com)
-
-<meta name="google-site-verification" content="giUpWYAmHlPtO3wW8WyVSabmpFg5irmPPvZK2gCWHB0" />
