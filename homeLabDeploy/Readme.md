@@ -33,13 +33,16 @@ hardware :
 1 x thincentre m700 64G RAM 1To SSD with additional USB nic
 3 x thinkcentre m910q 64G RAM 256G nvme 1To SSD with additional USB nic
 some manageable switch
+1 x rpi4 8Gb with local 1To SSD
 
 the final setup should look like to :
 
-1 ESXi for management workload (VCSA + dns, ntp)
-3 ESXi for workload with vSAN
+1 ESXi for management workload (VCSA + dns, ntp, optional iPXE)
+3 ESXi for x86 workload with vSAN
+1 ESXi for ARM64 workload
 
-> add schema
+## diagram
+![homelab diagram](img/homelab.png)
 
 # requirements
 
