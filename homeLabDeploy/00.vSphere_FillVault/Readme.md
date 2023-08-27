@@ -1,6 +1,22 @@
 ### 00.vSphere_fillVault
 
+## If you don't have a vault server
 
+If you don't have a vault, you can use the docker compose file in ./vault.docker to create one.
+
+You will need to create a certificate using openssl or the terraform file in CertPKI.
+
+Pull them in volumes/config/certs folder: 
+
+```sh
+volumes/
+└── config
+    └── certs
+        ├── vault-certificate.pem
+        └── vault-key.pem
+```
+
+## Fill vault with value
 Quick Terraform to fill your vault with minimum information for your IaC home lab deployment.
 
 the data model could be improve but for now :
@@ -28,6 +44,8 @@ Thow users have been created :
 * iacuser to be use by your terraform script, security best practice
 
 To fill your vault you will need the root token.
+
+## Grab a token with your freshly created user
 
 After that you could login to grab a token for iacuser for all the deployment.
 

@@ -1,0 +1,21 @@
+version: '3'
+services:
+  vault:
+    image: hashicorp/vault
+    container_name: vault
+    mem_limit: 1024M
+    mem_reservation: 128M
+    ports:
+      - "8200:8200"
+    # expose:
+    #   - "8200"
+    restart: always
+    volumes:
+      - ./volumes/logs:/vault/logs
+      - ./volumes/data:/vault/data
+      - ./volumes/config:/vault/config
+    cap_add:
+      - IPC_LOCK
+    entrypoint: vault server -config=/vault/config/vault.hcl
+
+

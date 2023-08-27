@@ -63,7 +63,19 @@ homeLabDeploy/
 │   │   ├── admin-policy.hcl
 │   │   └── iac-client-policy.hcl
 │   ├── Readme.md
-│   └── secrets.tf
+│   ├── secrets.tf
+│   ├── terraform.tfstate
+│   ├── terraform.tfstate.backup
+│   └── vault.docker
+│       ├── docker-compose.yml
+│       └── volumes
+│           ├── config
+│           │   ├── certs
+│           │   │   ├── vault-certificate.pem
+│           │   │   └── vault-key.pem
+│           │   └── vault.hcl
+│           ├── data
+│           └── logs
 ├── 01.vSphere_Tmp                 # Stage to setup the TMP VCSA
 │   ├── main.tf
 │   ├── terraform.tfvars
